@@ -1,2 +1,2 @@
 # CookieClickerRebirthed
-Click Click
+Click Click Motherfucker
