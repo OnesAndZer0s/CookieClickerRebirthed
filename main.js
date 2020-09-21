@@ -10,414 +10,6 @@ http://orteil.dashnet.org
 var VERSION=2.029;
 var BETA=0;
 
-
-/*=====================================================================================
-MISC HELPER FUNCTIONS
-=======================================================================================*/
-function l(what) {return document.getElementById(what);}
-function choose(arr) {return arr[Math.floor(Math.random()*arr.length)];}
-
-function escapeRegExp(str){return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");}
-function replaceAll(find,replace,str){return str.replace(new RegExp(escapeRegExp(find),'g'),replace);}
-
-//disable sounds coming from soundjay.com (sorry)
-var realAudio=Audio;//backup real audio
-Audio=function(src){
-	if (src && src.indexOf('soundjay')>-1) {Game.Popup('Sorry, no sounds hotlinked from soundjay.com.');this.play=function(){};}
-	else return new realAudio(src);
-};
-
-if(!Array.prototype.indexOf) {
-    Array.prototype.indexOf = function(needle) {
-        for(var i = 0; i < this.length; i++) {
-            if(this[i] === needle) {return i;}
-        }
-        return -1;
-    };
-}
-
-function randomFloor(x) {if ((x%1)<Math.random()) return Math.floor(x); else return Math.ceil(x);}
-
-function shuffle(array)
-{
-	var counter = array.length, temp, index;
-	// While there are elements in the array
-	while (counter--)
-	{
-		// Pick a random index
-		index = (Math.random() * counter) | 0;
-
-		// And swap the last element with it
-		temp = array[counter];
-		array[counter] = array[index];
-		array[index] = temp;
-	}
-	return array;
-}
-
-var sinArray=[];
-for (var i=0;i<360;i++)
-{
-	//let's make a lookup table
-	sinArray[i]=Math.sin(i/360*Math.PI*2);
-}
-function quickSin(x)
-{
-	//oh man this isn't all that fast actually
-	//why do I do this. why
-	var sign=x<0?-1:1;
-	return sinArray[Math.round(
-		(Math.abs(x)*360/Math.PI/2)%360
-	)]*sign;
-}
-
-/*function ajax(url,callback){
-	var ajaxRequest;
-	try{ajaxRequest = new XMLHttpRequest();} catch (e){try{ajaxRequest=new ActiveXObject('Msxml2.XMLHTTP');} catch (e) {try{ajaxRequest=new ActiveXObject('Microsoft.XMLHTTP');} catch (e){alert("Something broke!");return false;}}}
-	if (callback){ajaxRequest.onreadystatechange=function(){if(ajaxRequest.readyState==4){callback(ajaxRequest.responseText);}}}
-	ajaxRequest.open('GET',url+'&nocache='+(new Date().getTime()),true);
-  ajaxRequest.setRequestHeader("origin","orteil.dashnet.org");
-  ajaxRequest.send(null);
-}*/
-
-var ajax=function(url,callback)
-{
-	var httpRequest=new XMLHttpRequest();
-	if (!httpRequest){return false;}
-	httpRequest.onreadystatechange=function()
-	{
-		try{
-			if (httpRequest.readyState===XMLHttpRequest.DONE && httpRequest.status===200)
-			{
-				callback(httpRequest.responseText);
-			}
-		}catch(e){}
-	}
-	//httpRequest.onerror=function(e){console.log('ERROR',e);}
-	if (url.indexOf('?')==-1) url+='?'; else url+='&';
-	url+='nocache='+Date.now();
-	httpRequest.open('GET',url);
-	httpRequest.setRequestHeader('Content-Type','text/plain');
-	httpRequest.overrideMimeType('text/plain');
-	httpRequest.send();
-	return true;
-}
-
-function toFixed(x)
-{
-	if (Math.abs(x) < 1.0) {
-		var e = parseInt(x.toString().split('e-')[1]);
-		if (e) {
-			x *= Math.pow(10,e-1);
-			x = '0.' + (new Array(e)).join('0') + x.toString().substring(2);
-		}
-	} else {
-		var e = parseInt(x.toString().split('+')[1]);
-		if (e > 20) {
-			e -= 20;
-			x /= Math.pow(10,e);
-			x += (new Array(e+1)).join('0');
-		}
-	}
-	return x;
-}
-
-//Beautify and number-formatting adapted from the Frozen Cookies add-on (http://cookieclicker.wikia.com/wiki/Frozen_Cookies_%28JavaScript_Add-on%29)
-function formatEveryThirdPower(notations)
-{
-	return function (value)
-	{
-		var base = 0,
-		notationValue = '';
-		if (!isFinite(value)) return 'Infinity';
-		if (value >= 1000000)
-		{
-			value /= 1000;
-			while(Math.round(value) >= 1000)
-			{
-				value /= 1000;
-				base++;
-			}
-			if (base >= notations.length) {return 'Infinity';} else {notationValue = notations[base];}
-		}
-		return ( Math.round(value * 1000) / 1000 ) + notationValue;
-	};
-}
-
-function rawFormatter(value) {return Math.round(value * 1000) / 1000;}
-
-var formatLong=[' thousand',' million',' billion',' trillion',' quadrillion',' quintillion',' sextillion',' septillion',' octillion',' nonillion'];
-var prefixes=['','un','duo','tre','quattuor','quin','sex','septen','octo','novem'];
-var suffixes=['decillion','vigintillion','trigintillion','quadragintillion','quinquagintillion','sexagintillion','septuagintillion','octogintillion','nonagintillion'];
-for (var i in suffixes)
-{
-	for (var ii in prefixes)
-	{
-		formatLong.push(' '+prefixes[ii]+suffixes[i]);
-	}
-}
-
-var formatShort=['k','M','B','T','Qa','Qi','Sx','Sp','Oc','No'];
-var prefixes=['','Un','Do','Tr','Qa','Qi','Sx','Sp','Oc','No'];
-var suffixes=['D','V','T','Qa','Qi','Sx','Sp','O','N'];
-for (var i in suffixes)
-{
-	for (var ii in prefixes)
-	{
-		formatShort.push(' '+prefixes[ii]+suffixes[i]);
-	}
-}
-formatShort[10]='Dc';
-
-
-var numberFormatters =
-[
-	formatEveryThirdPower(formatShort),
-	formatEveryThirdPower(formatLong),
-	rawFormatter
-];
-function Beautify(value,floats)
-{
-	var negative=(value<0);
-	var decimal='';
-	var fixed=value.toFixed(floats);
-	if (Math.abs(value)<1000 && floats>0 && Math.floor(fixed)!=fixed) decimal='.'+(fixed.toString()).split('.')[1];
-	value=Math.floor(Math.abs(value));
-	if (floats>0 && fixed==value+1) value++;
-	var formatter=numberFormatters[Game.prefs.format?2:1];
-	var output=(value.toString().indexOf('e+')!=-1 && Game.prefs.format==1)?value.toPrecision(3).toString():formatter(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g,',');
-	//var output=formatter(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g,',');
-	if (output=='0') negative=false;
-	return negative?'-'+output:output+decimal;
-}
-function shortenNumber(value)
-{
-	//if no scientific notation, return as is, else :
-	//keep only the 5 first digits (plus dot), round the rest
-	//may or may not work properly
-	if (value >= 1000000 && isFinite(value))
-	{
-		var num=value.toString();
-		var ind=num.indexOf('e+');
-		if (ind==-1) return value;
-		var str='';
-		for (var i=0;i<ind;i++)
-		{
-			str+=(i<6?num[i]:'0');
-		}
-		str+='e+';
-		str+=num.split('e+')[1];
-		return parseFloat(str);
-	}
-	return value;
-}
-
-SimpleBeautify=function(val)
-{
-	var str=val.toString();
-	var str2='';
-	for (var i in str)//add commas
-	{
-		if ((str.length-i)%3==0 && i>0) str2+=',';
-		str2+=str[i];
-	}
-	return str2;
-}
-
-var beautifyInTextFilter=/(([\d]+[,]*)+)/g;//new regex
-function BeautifyInTextFunction(str){return Beautify(parseInt(str.replace(/,/g,''),10));};
-function BeautifyInText(str) {return str.replace(beautifyInTextFilter,BeautifyInTextFunction);}//reformat every number inside a string
-function BeautifyAll()//run through upgrades and achievements to reformat the numbers
-{
-	var func=function(what){what.desc=BeautifyInText(what.baseDesc);}
-	Game.UpgradesById.forEach(func);
-	Game.AchievementsById.forEach(func);
-}
-
-//these are faulty, investigate later
-//function utf8_to_b64(str){return btoa(str);}
-//function b64_to_utf8(str){return atob(str);}
-
-function utf8_to_b64( str ) {
-	try{return Base64.encode(unescape(encodeURIComponent( str )));}
-	catch(err)
-	{return '';}
-}
-
-function b64_to_utf8( str ) {
-	try{return decodeURIComponent(escape(Base64.decode( str )));}
-	catch(err)
-	{return '';}
-}
-
-function CompressBin(arr)//compress a sequence like [0,1,1,0,1,0]... into a number like 54.
-{
-	var str='';
-	var arr2=arr.slice(0);
-	arr2.unshift(1);
-	arr2.push(1);
-	arr2.reverse();
-	for (var i in arr2)
-	{
-		str+=arr2[i];
-	}
-	str=parseInt(str,2);
-	return str;
-}
-
-function UncompressBin(num)//uncompress a number like 54 to a sequence like [0,1,1,0,1,0].
-{
-	var arr=num.toString(2);
-	arr=arr.split('');
-	arr.reverse();
-	arr.shift();
-	arr.pop();
-	return arr;
-}
-
-function CompressLargeBin(arr)//we have to compress in smaller chunks to avoid getting into scientific notation
-{
-	var arr2=arr.slice(0);
-	var thisBit=[];
-	var bits=[];
-	for (var i in arr2)
-	{
-		thisBit.push(arr2[i]);
-		if (thisBit.length>=50)
-		{
-			bits.push(CompressBin(thisBit));
-			thisBit=[];
-		}
-	}
-	if (thisBit.length>0) bits.push(CompressBin(thisBit));
-	arr2=bits.join(';');
-	return arr2;
-}
-
-function UncompressLargeBin(arr)
-{
-	var arr2=arr.split(';');
-	var bits=[];
-	for (var i in arr2)
-	{
-		bits.push(UncompressBin(parseInt(arr2[i])));
-	}
-	arr2=[];
-	for (var i in bits)
-	{
-		for (var ii in bits[i]) arr2.push(bits[i][ii]);
-	}
-	return arr2;
-}
-
-
-function pack(bytes) {
-    var chars = [];
-	var len=bytes.length;
-    for(var i = 0, n = len; i < n;) {
-        chars.push(((bytes[i++] & 0xff) << 8) | (bytes[i++] & 0xff));
-    }
-    return String.fromCharCode.apply(null, chars);
-}
-
-function unpack(str) {
-    var bytes = [];
-	var len=str.length;
-    for(var i = 0, n = len; i < n; i++) {
-        var char = str.charCodeAt(i);
-        bytes.push(char >>> 8, char & 0xFF);
-    }
-    return bytes;
-}
-
-//modified from http://www.smashingmagazine.com/2011/10/19/optimizing-long-lists-of-yesno-values-with-javascript/
-function pack2(/* string */ values) {
-    var chunks = values.match(/.{1,14}/g), packed = '';
-    for (var i=0; i < chunks.length; i++) {
-        packed += String.fromCharCode(parseInt('1'+chunks[i], 2));
-    }
-    return packed;
-}
-
-function unpack2(/* string */ packed) {
-    var values = '';
-    for (var i=0; i < packed.length; i++) {
-        values += packed.charCodeAt(i).toString(2).substring(1);
-    }
-    return values;
-}
-
-function pack3(values){
-	//too many save corruptions, darn it to heck
-	return values;
-}
-
-
-//file save function from https://github.com/eligrey/FileSaver.js
-var saveAs=saveAs||function(view){"use strict";if(typeof navigator!=="undefined"&&/MSIE [1-9]\./.test(navigator.userAgent)){return}var doc=view.document,get_URL=function(){return view.URL||view.webkitURL||view},save_link=doc.createElementNS("http://www.w3.org/1999/xhtml","a"),can_use_save_link="download"in save_link,click=function(node){var event=new MouseEvent("click");node.dispatchEvent(event)},is_safari=/Version\/[\d\.]+.*Safari/.test(navigator.userAgent),webkit_req_fs=view.webkitRequestFileSystem,req_fs=view.requestFileSystem||webkit_req_fs||view.mozRequestFileSystem,throw_outside=function(ex){(view.setImmediate||view.setTimeout)(function(){throw ex},0)},force_saveable_type="application/octet-stream",fs_min_size=0,arbitrary_revoke_timeout=500,revoke=function(file){var revoker=function(){if(typeof file==="string"){get_URL().revokeObjectURL(file)}else{file.remove()}};if(view.chrome){revoker()}else{setTimeout(revoker,arbitrary_revoke_timeout)}},dispatch=function(filesaver,event_types,event){event_types=[].concat(event_types);var i=event_types.length;while(i--){var listener=filesaver["on"+event_types[i]];if(typeof listener==="function"){try{listener.call(filesaver,event||filesaver)}catch(ex){throw_outside(ex)}}}},auto_bom=function(blob){if(/^\s*(?:text\/\S*|application\/xml|\S*\/\S*\+xml)\s*;.*charset\s*=\s*utf-8/i.test(blob.type)){return new Blob(["\ufeff",blob],{type:blob.type})}return blob},FileSaver=function(blob,name,no_auto_bom){if(!no_auto_bom){blob=auto_bom(blob)}var filesaver=this,type=blob.type,blob_changed=false,object_url,target_view,dispatch_all=function(){dispatch(filesaver,"writestart progress write writeend".split(" "))},fs_error=function(){if(target_view&&is_safari&&typeof FileReader!=="undefined"){var reader=new FileReader;reader.onloadend=function(){var base64Data=reader.result;target_view.location.href="data:attachment/file"+base64Data.slice(base64Data.search(/[,;]/));filesaver.readyState=filesaver.DONE;dispatch_all()};reader.readAsDataURL(blob);filesaver.readyState=filesaver.INIT;return}if(blob_changed||!object_url){object_url=get_URL().createObjectURL(blob)}if(target_view){target_view.location.href=object_url}else{var new_tab=view.open(object_url,"_blank");if(new_tab==undefined&&is_safari){view.location.href=object_url}}filesaver.readyState=filesaver.DONE;dispatch_all();revoke(object_url)},abortable=function(func){return function(){if(filesaver.readyState!==filesaver.DONE){return func.apply(this,arguments)}}},create_if_not_found={create:true,exclusive:false},slice;filesaver.readyState=filesaver.INIT;if(!name){name="download"}if(can_use_save_link){object_url=get_URL().createObjectURL(blob);setTimeout(function(){save_link.href=object_url;save_link.download=name;click(save_link);dispatch_all();revoke(object_url);filesaver.readyState=filesaver.DONE});return}if(view.chrome&&type&&type!==force_saveable_type){slice=blob.slice||blob.webkitSlice;blob=slice.call(blob,0,blob.size,force_saveable_type);blob_changed=true}if(webkit_req_fs&&name!=="download"){name+=".download"}if(type===force_saveable_type||webkit_req_fs){target_view=view}if(!req_fs){fs_error();return}fs_min_size+=blob.size;req_fs(view.TEMPORARY,fs_min_size,abortable(function(fs){fs.root.getDirectory("saved",create_if_not_found,abortable(function(dir){var save=function(){dir.getFile(name,create_if_not_found,abortable(function(file){file.createWriter(abortable(function(writer){writer.onwriteend=function(event){target_view.location.href=file.toURL();filesaver.readyState=filesaver.DONE;dispatch(filesaver,"writeend",event);revoke(file)};writer.onerror=function(){var error=writer.error;if(error.code!==error.ABORT_ERR){fs_error()}};"writestart progress write abort".split(" ").forEach(function(event){writer["on"+event]=filesaver["on"+event]});writer.write(blob);filesaver.abort=function(){writer.abort();filesaver.readyState=filesaver.DONE};filesaver.readyState=filesaver.WRITING}),fs_error)}),fs_error)};dir.getFile(name,{create:false},abortable(function(file){file.remove();save()}),abortable(function(ex){if(ex.code===ex.NOT_FOUND_ERR){save()}else{fs_error()}}))}),fs_error)}),fs_error)},FS_proto=FileSaver.prototype,saveAs=function(blob,name,no_auto_bom){return new FileSaver(blob,name,no_auto_bom)};if(typeof navigator!=="undefined"&&navigator.msSaveOrOpenBlob){return function(blob,name,no_auto_bom){if(!no_auto_bom){blob=auto_bom(blob)}return navigator.msSaveOrOpenBlob(blob,name||"download")}}FS_proto.abort=function(){var filesaver=this;filesaver.readyState=filesaver.DONE;dispatch(filesaver,"abort")};FS_proto.readyState=FS_proto.INIT=0;FS_proto.WRITING=1;FS_proto.DONE=2;FS_proto.error=FS_proto.onwritestart=FS_proto.onprogress=FS_proto.onwrite=FS_proto.onabort=FS_proto.onerror=FS_proto.onwriteend=null;return saveAs}(typeof self!=="undefined"&&self||typeof window!=="undefined"&&window||this.content);if(typeof module!=="undefined"&&module.exports){module.exports.saveAs=saveAs}else if(typeof define!=="undefined"&&define!==null&&define.amd!=null){define([],function(){return saveAs})}
-
-
-//seeded random function, courtesy of http://davidbau.com/archives/2010/01/30/random_seeds_coded_hints_and_quintillions.html
-(function(a,b,c,d,e,f){function k(a){var b,c=a.length,e=this,f=0,g=e.i=e.j=0,h=e.S=[];for(c||(a=[c++]);d>f;)h[f]=f++;for(f=0;d>f;f++)h[f]=h[g=j&g+a[f%c]+(b=h[f])],h[g]=b;(e.g=function(a){for(var b,c=0,f=e.i,g=e.j,h=e.S;a--;)b=h[f=j&f+1],c=c*d+h[j&(h[f]=h[g=j&g+b])+(h[g]=b)];return e.i=f,e.j=g,c})(d)}function l(a,b){var e,c=[],d=(typeof a)[0];if(b&&"o"==d)for(e in a)try{c.push(l(a[e],b-1))}catch(f){}return c.length?c:"s"==d?a:a+"\0"}function m(a,b){for(var d,c=a+"",e=0;c.length>e;)b[j&e]=j&(d^=19*b[j&e])+c.charCodeAt(e++);return o(b)}function n(c){try{return a.crypto.getRandomValues(c=new Uint8Array(d)),o(c)}catch(e){return[+new Date,a,a.navigator.plugins,a.screen,o(b)]}}function o(a){return String.fromCharCode.apply(0,a)}var g=c.pow(d,e),h=c.pow(2,f),i=2*h,j=d-1;c.seedrandom=function(a,f){var j=[],p=m(l(f?[a,o(b)]:0 in arguments?a:n(),3),j),q=new k(j);return m(o(q.S),b),c.random=function(){for(var a=q.g(e),b=g,c=0;h>a;)a=(a+c)*d,b*=d,c=q.g(1);for(;a>=i;)a/=2,b/=2,c>>>=1;return(a+c)/b},p},m(c.random(),b)})(this,[],Math,256,6,52);
-
-function bind(scope,fn)
-{
-	//use : bind(this,function(){this.x++;}) - returns a function where "this" refers to the scoped this
-	return function() {fn.apply(scope,arguments);};
-}
-
-var grabProps=function(arr,prop)
-{
-	if (!arr) return [];
-	arr2=[];
-	for (var i=0;i<arr.length;i++)
-	{
-		arr2.push(arr[i][prop]);
-	}
-	return arr2;
-}
-
-CanvasRenderingContext2D.prototype.fillPattern=function(img,X,Y,W,H,iW,iH,offX,offY)
-{
-	//for when built-in patterns aren't enough
-	if (img.alt!='blank')
-	{
-		var offX=offX||0;
-		var offY=offY||0;
-		if (offX<0) {offX=offX-Math.floor(offX/iW)*iW;} if (offX>0) {offX=(offX%iW)-iW;}
-		if (offY<0) {offY=offY-Math.floor(offY/iH)*iH;} if (offY>0) {offY=(offY%iH)-iH;}
-		for (var y=offY;y<H;y+=iH){for (var x=offX;x<W;x+=iW){this.drawImage(img,X+x,Y+y,iW,iH);}}
-	}
-}
-
-var OldCanvasDrawImage=CanvasRenderingContext2D.prototype.drawImage;
-CanvasRenderingContext2D.prototype.drawImage=function()
-{
-	//only draw the image if it's loaded
-	if (arguments[0].alt!='blank') OldCanvasDrawImage.apply(this,arguments);
-}
-
-
-if (!document.hasFocus) document.hasFocus=function(){return document.hidden;};//for Opera
-
-function AddEvent(html_element, event_name, event_function)
-{
-	if(html_element.attachEvent) html_element.attachEvent("on" + event_name, function() {event_function.call(html_element);});
-	else if(html_element.addEventListener) html_element.addEventListener(event_name, event_function, false);
-}
-
-function FireEvent(el, etype)
-{
-	if (el.fireEvent)
-	{el.fireEvent('on'+etype);}
-	else
-	{
-		var evObj=document.createEvent('Events');
-		evObj.initEvent(etype,true,false);
-		el.dispatchEvent(evObj);
-	}
-}
-
 var Loader=function()//asset-loading system
 {
 	this.loadingN=0;
@@ -544,7 +136,7 @@ var PlaySound=function(url,vol,pitchVar)
 
 if (!Date.now){Date.now=function now() {return new Date().getTime();};}
 
-triggerAnim=function(element,anim)
+function triggerAnim(element,anim)
 {
 	if (!element) return;
 	element.classList.remove(anim);
@@ -609,7 +201,7 @@ Game.Launch=function()
 	
 	var css=document.createElement('style');
 	css.type='text/css';
-	css.innerHTML='body .icon,body .crate,body .usesIcon{background-image:url(img/icons.png?v='+Game.version+');}';
+	css.innerHTML='body .icon,body .crate,body .usesIcon{background-image:url(assets/img/icons.png?v='+Game.version+');}';
 	document.head.appendChild(css);
 	
 	Game.baseSeason='';//halloween, christmas, valentines, fools, easter
@@ -1158,7 +750,7 @@ Game.Launch=function()
 	{
 		//l('javascriptError').innerHTML='<div style="padding:64px 128px;"><div class="title">Loading...</div></div>';
 		Game.Loader=new Loader();
-		Game.Loader.domain='img/';
+		Game.Loader.domain='assets/img/';
 		Game.Loader.loaded=Game.Init;
 		Game.Loader.Load(['filler.png']);
 	}
@@ -1220,7 +812,7 @@ Game.Launch=function()
 		
 		Game.SaveTo='CookieClickerGame';
 		if (Game.beta) Game.SaveTo='CookieClickerGameBeta';
-		l('versionNumber').innerHTML='v. '+Game.version+'<div id="httpsSwitch" style="cursor:pointer;display:inline-block;background:url(img/'+(Game.https?'lockOn':'lockOff')+'.png);width:16px;height:16px;position:relative;top:4px;left:0px;margin:0px -2px;"></div>'+(Game.beta?' <span style="color:#ff0;">beta</span>':'');
+		l('versionNumber').innerHTML='v. '+Game.version+'<div id="httpsSwitch" style="cursor:pointer;display:inline-block;background:url(assets/img/'+(Game.https?'lockOn':'lockOff')+'.png);width:16px;height:16px;position:relative;top:4px;left:0px;margin:0px -2px;"></div>'+(Game.beta?' <span style="color:#ff0;">beta</span>':'');
 		
 		if (Game.beta) {var me=l('linkVersionBeta');me.parentNode.removeChild(me);}
 		else if (Game.version==1.0466) {var me=l('linkVersionOld');me.parentNode.removeChild(me);}
@@ -1698,7 +1290,7 @@ Game.Launch=function()
 		
 		Game.GrabData=function()
 		{
-			ajax('http://www.whateverorigin.org/get?url=http://orteil.dashnet.org/patreon/grab.php',Game.GrabDataResponse);
+			//ajax('http://cors-anywhere.herokuapp.com/http://orteil.dashnet.org/patreon/grab.php',Game.GrabDataResponse);
 		}
 		Game.GrabDataResponse=function(response)
 		{
@@ -1729,7 +1321,7 @@ Game.Launch=function()
 		
 		Game.attachTooltip(l('httpsSwitch'),'<div style="padding:8px;width:350px;text-align:center;font-size:11px;">You are currently playing Cookie Clicker on the <b>'+(Game.https?'HTTPS':'HTTP')+'</b> protocol.<br>The <b>'+(Game.https?'HTTP':'HTTPS')+'</b> version uses a different save slot than this one.<br>Click this lock to reload the page and switch to the <b>'+(Game.https?'HTTP':'HTTPS')+'</b> version!</div>','this');
 		AddEvent(l('httpsSwitch'),'click',function(){
-			PlaySound('snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
+			PlaySound('assets/assets/snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
 			if (location.protocol=='https:') location.href='http:'+window.location.href.substring(window.location.protocol.length);
 			else if (location.protocol=='http:') location.href='https:'+window.location.href.substring(window.location.protocol.length);
 		});
@@ -1754,7 +1346,7 @@ Game.Launch=function()
 				if (Game.heralds==0) str+='There are no heralds at the moment. Please consider <b style="color:#bc3aff;">donating to our Patreon</b>!';
 				else
 				{
-					str+=(Game.heralds==1?'<b style="color:#bc3aff;text-shadow:0px 1px 0px #6d0096;">1 herald</b> is':'<b style="color:#fff;text-shadow:0px 1px 0px #6d0096,0px 0px 6px #bc3aff;">'+Game.heralds+' heralds</b> are')+' selflessly inspiring a boost in production for everyone, resulting in<br><b style="color:#cdaa89;text-shadow:0px 1px 0px #7c4532,0px 0px 6px #7c4532;"><div style="width:16px;height:16px;display:inline-block;vertical-align:middle;background:url(img/money.png);"></div> +'+Game.heralds+'% cookies per second</b>.';
+					str+=(Game.heralds==1?'<b style="color:#bc3aff;text-shadow:0px 1px 0px #6d0096;">1 herald</b> is':'<b style="color:#fff;text-shadow:0px 1px 0px #6d0096,0px 0px 6px #bc3aff;">'+Game.heralds+' heralds</b> are')+' selflessly inspiring a boost in production for everyone, resulting in<br><b style="color:#cdaa89;text-shadow:0px 1px 0px #7c4532,0px 0px 6px #7c4532;"><div style="width:16px;height:16px;display:inline-block;vertical-align:middle;background:url(assets/img/money.png);"></div> +'+Game.heralds+'% cookies per second</b>.';
 					str+='<div class="line"></div>';
 					if (Game.ascensionMode==1) str+='You are in a <b>Born again</b> run, and are not currently benefiting from heralds.';
 					else if (Game.Has('Heralds')) str+='You own the <b>Heralds</b> upgrade, and therefore benefit from the production boost.';
@@ -1763,7 +1355,7 @@ Game.Launch=function()
 			}
 			str+='<div class="line"></div><span style="font-size:90%;opacity:0.6;"><b>Heralds</b> are people who have donated to our highest Patreon tier, and are limited to 100.<br>Each herald gives everyone +1% CpS.<br>Heralds benefit everyone playing the game, regardless of whether you donated.</span>';
 			
-			str+='<div style="width:31px;height:39px;background:url(img/heraldFlag.png);position:absolute;top:0px;left:8px;"></div><div style="width:31px;height:39px;background:url(img/heraldFlag.png);position:absolute;top:0px;right:8px;"></div>';
+			str+='<div style="width:31px;height:39px;background:url(assets/img/heraldFlag.png);position:absolute;top:0px;left:8px;"></div><div style="width:31px;height:39px;background:url(assets/img/heraldFlag.png);position:absolute;top:0px;right:8px;"></div>';
 			
 			return '<div style="padding:8px;width:300px;text-align:center;" class="prompt"><h3>Heralds</h3><div class="block">'+str+'</div></div>';
 		},'this');
@@ -3118,14 +2710,14 @@ Game.Launch=function()
 		}
 		Game.PickAscensionMode=function()
 		{
-			PlaySound('snd/tick.mp3');
+			PlaySound('assets/assets/snd/tick.mp3');
 			Game.tooltip.hide();
 			
 			var str='';
 			for (var i in Game.ascensionModes)
 			{
 				var icon=Game.ascensionModes[i].icon;
-				str+='<div class="crate enabled'+(i==Game.nextAscensionMode?' highlighted':'')+'" id="challengeModeSelector'+i+'" style="opacity:1;float:none;display:inline-block;background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="Game.nextAscensionMode='+i+';Game.PickAscensionMode();PlaySound(\'snd/tick.mp3\');Game.choiceSelectorOn=-1;" onMouseOut="l(\'challengeSelectedName\').innerHTML=Game.ascensionModes[Game.nextAscensionMode].name;l(\'challengeSelectedDesc\').innerHTML=Game.ascensionModes[Game.nextAscensionMode].desc;" onMouseOver="l(\'challengeSelectedName\').innerHTML=Game.ascensionModes['+i+'].name;l(\'challengeSelectedDesc\').innerHTML=Game.ascensionModes['+i+'].desc;"'+
+				str+='<div class="crate enabled'+(i==Game.nextAscensionMode?' highlighted':'')+'" id="challengeModeSelector'+i+'" style="opacity:1;float:none;display:inline-block;background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="Game.nextAscensionMode='+i+';Game.PickAscensionMode();PlaySound(\'assets/assets/snd/tick.mp3\');Game.choiceSelectorOn=-1;" onMouseOut="l(\'challengeSelectedName\').innerHTML=Game.ascensionModes[Game.nextAscensionMode].name;l(\'challengeSelectedDesc\').innerHTML=Game.ascensionModes[Game.nextAscensionMode].desc;" onMouseOver="l(\'challengeSelectedName\').innerHTML=Game.ascensionModes['+i+'].name;l(\'challengeSelectedDesc\').innerHTML=Game.ascensionModes['+i+'].desc;"'+
 				'></div>';
 			}
 			Game.Prompt('<h3>Select a challenge mode</h3>'+
@@ -3174,7 +2766,7 @@ Game.Launch=function()
 		Game.UpdateAscensionModePrompt();
 		
 		AddEvent(l('ascendButton'),'click',function(){
-			PlaySound('snd/tick.mp3');
+			PlaySound('assets/snd/tick.mp3');
 			Game.Reincarnate();
 		});
 		
@@ -3188,13 +2780,13 @@ Game.Launch=function()
 		Game.AscendBreakpoint=Game.AscendDuration*0.5;//at which point the cookie explodes during the ascend animation
 		Game.UpdateAscendIntro=function()
 		{
-			if (Game.AscendTimer==1) PlaySound('snd/charging.mp3');
-			if (Game.AscendTimer==Math.floor(Game.AscendBreakpoint)) PlaySound('snd/thud.mp3');
+			if (Game.AscendTimer==1) PlaySound('assets/snd/charging.mp3');
+			if (Game.AscendTimer==Math.floor(Game.AscendBreakpoint)) PlaySound('assets/snd/thud.mp3');
 			Game.AscendTimer++;
 			if (Game.AscendTimer>Game.AscendDuration)//end animation and launch ascend screen
 			{
-				PlaySound('snd/cymbalRev.mp3',0.5);
-				PlaySound('snd/choir.mp3');
+				PlaySound('assets/snd/cymbalRev.mp3',0.5);
+				PlaySound('assets/snd/choir.mp3');
 				Game.EarnHeavenlyChips(Game.cookiesEarned);
 				Game.AscendTimer=0;
 				Game.OnAscend=1;Game.removeClass('ascendIntro');
@@ -3210,7 +2802,7 @@ Game.Launch=function()
 		Game.ReincarnateDuration=Game.fps*1;//how long the reincarnation animation is
 		Game.UpdateReincarnateIntro=function()
 		{
-			if (Game.ReincarnateTimer==1) PlaySound('snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
+			if (Game.ReincarnateTimer==1) PlaySound('assets/snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
 			Game.ReincarnateTimer++;
 			if (Game.ReincarnateTimer>Game.ReincarnateDuration)//end animation and launch regular game
 			{
@@ -3669,7 +3261,7 @@ Game.Launch=function()
 				var rect=l('lumpsIcon2').getBoundingClientRect();Game.SparkleAt((rect.left+rect.right)/2,(rect.top+rect.bottom)/2-24);
 				if (total>0) Game.Popup('<small>+'+Beautify(total)+' sugar lump'+(total==1?'':'s')+'</small>',(rect.left+rect.right)/2,(rect.top+rect.bottom)/2-48);
 				else Game.Popup('<small>Botched harvest!</small>',(rect.left+rect.right)/2,(rect.top+rect.bottom)/2-48);
-				PlaySound('snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
+				PlaySound('assets/snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
 			}
 			Game.computeLumpTimes();
 		}
@@ -3729,9 +3321,9 @@ Game.Launch=function()
 				if (Game.lumps<n) return false;
 				if (Game.prefs.askLumps)
 				{
-					PlaySound('snd/tick.mp3');
+					PlaySound('assets/snd/tick.mp3');
 					Game.promptConfirmFunc=func;//bit dumb
-					Game.Prompt('<div class="icon" style="background:url(img/icons.png?v='+Game.version+');float:left;margin-left:-8px;margin-top:-8px;background-position:'+(-29*48)+'px '+(-14*48)+'px;"></div><div style="margin:16px 8px;">Do you want to spend <b>'+Beautify(n)+' lump'+(n!=1?'s':'')+'</b> to '+str+'?</div>',[['Yes','Game.lumps-='+n+';Game.promptConfirmFunc();Game.promptConfirmFunc=0;Game.recalculateGains=1;Game.ClosePrompt();'],'No']);
+					Game.Prompt('<div class="icon" style="background:url(assets/img/icons.png?v='+Game.version+');float:left;margin-left:-8px;margin-top:-8px;background-position:'+(-29*48)+'px '+(-14*48)+'px;"></div><div style="margin:16px 8px;">Do you want to spend <b>'+Beautify(n)+' lump'+(n!=1?'s':'')+'</b> to '+str+'?</div>',[['Yes','Game.lumps-='+n+';Game.promptConfirmFunc();Game.promptConfirmFunc=0;Game.recalculateGains=1;Game.ClosePrompt();'],'No']);
 					return false;
 				}
 				else
@@ -3901,8 +3493,8 @@ Game.Launch=function()
 		Game.cookieClickSound=Math.floor(Math.random()*7)+1;
 		Game.playCookieClickSound=function()
 		{
-			if (Game.prefs.cookiesound) PlaySound('snd/clickb'+(Game.cookieClickSound)+'.mp3',0.5);
-			else PlaySound('snd/click'+(Game.cookieClickSound)+'.mp3',0.5);
+			if (Game.prefs.cookiesound) PlaySound('assets/snd/clickb'+(Game.cookieClickSound)+'.mp3',0.5);
+			else PlaySound('assets/snd/click'+(Game.cookieClickSound)+'.mp3',0.5);
 			Game.cookieClickSound+=Math.floor(Math.random()*4)+1;
 			if (Game.cookieClickSound>7) Game.cookieClickSound-=7;
 		}
@@ -4429,18 +4021,18 @@ Game.Launch=function()
 				},
 				initFunc:function(me)
 				{
-					if (!this.spawned && Game.chimeType==1 && Game.ascensionMode!=1) PlaySound('snd/chime.mp3');
+					if (!this.spawned && Game.chimeType==1 && Game.ascensionMode!=1) PlaySound('assets/snd/chime.mp3');
 					
 					//set image
-					var bgPic='img/goldCookie.png';
+					var bgPic='assets/img/goldCookie.png';
 					var picX=0;var picY=0;
 					
 					
 					if ((!me.forceObj || !me.forceObj.noWrath) && ((me.forceObj && me.forceObj.wrath) || (Game.elderWrath==1 && Math.random()<1/3) || (Game.elderWrath==2 && Math.random()<2/3) || (Game.elderWrath==3) || (Game.hasGod && Game.hasGod('scorn'))))
 					{
 						me.wrath=1;
-						if (Game.season=='halloween') bgPic='img/spookyCookie.png';
-						else bgPic='img/wrathCookie.png';
+						if (Game.season=='halloween') bgPic='assets/img/spookyCookie.png';
+						else bgPic='assets/img/wrathCookie.png';
 					}
 					else
 					{
@@ -4449,17 +4041,17 @@ Game.Launch=function()
 					
 					if (Game.season=='valentines')
 					{
-						bgPic='img/hearts.png';
+						bgPic='assets/img/hearts.png';
 						picX=Math.floor(Math.random()*8);
 					}
 					else if (Game.season=='fools')
 					{
-						bgPic='img/contract.png';
-						if (me.wrath) bgPic='img/wrathContract.png';
+						bgPic='assets/img/contract.png';
+						if (me.wrath) bgPic='assets/img/wrathContract.png';
 					}
 					else if (Game.season=='easter')
 					{
-						bgPic='img/bunnies.png';
+						bgPic='assets/img/bunnies.png';
 						picX=Math.floor(Math.random()*4);
 						picY=0;
 						if (me.wrath) picY=1;
@@ -4743,10 +4335,10 @@ Game.Launch=function()
 					Game.SparkleAt(me.x+48,me.y+48);
 					if (choice=='cookie storm drop')
 					{
-						if (Game.prefs.cookiesound) PlaySound('snd/clickb'+Math.floor(Math.random()*7+1)+'.mp3',0.75);
-						else PlaySound('snd/click'+Math.floor(Math.random()*7+1)+'.mp3',0.75);
+						if (Game.prefs.cookiesound) PlaySound('assets/snd/clickb'+Math.floor(Math.random()*7+1)+'.mp3',0.75);
+						else PlaySound('assets/snd/click'+Math.floor(Math.random()*7+1)+'.mp3',0.75);
 					}
-					else PlaySound('snd/shimmerClick.mp3');
+					else PlaySound('assets/snd/shimmerClick.mp3');
 					me.die();
 				},
 				missFunc:function(me)
@@ -4833,7 +4425,7 @@ Game.Launch=function()
 				},
 				initFunc:function(me)
 				{
-					if (!this.spawned && Game.chimeType==1 && Game.ascensionMode!=1) PlaySound('snd/jingle.mp3');
+					if (!this.spawned && Game.chimeType==1 && Game.ascensionMode!=1) PlaySound('assets/snd/jingle.mp3');
 					
 					me.x=-128;
 					me.y=Math.floor(Math.random()*Math.max(0,Game.bounds.bottom-Game.bounds.top-256)+Game.bounds.top+128)-128;
@@ -4841,7 +4433,7 @@ Game.Launch=function()
 					//me.l.style.top=me.y+'px';
 					me.l.style.width='167px';
 					me.l.style.height='212px';
-					me.l.style.backgroundImage='url(img/frostedReindeer.png)';
+					me.l.style.backgroundImage='url(assets/img/frostedReindeer.png)';
 					me.l.style.opacity='0';
 					//me.l.style.transform='rotate('+(Math.random()*60-30)+'deg) scale('+(Math.random()*1+0.25)+')';
 					me.l.style.display='block';
@@ -4913,7 +4505,7 @@ Game.Launch=function()
 					
 					//sparkle and kill the shimmer
 					Game.SparkleAt(Game.mouseX,Game.mouseY);
-					PlaySound('snd/jingleClick.mp3');
+					PlaySound('assets/snd/jingleClick.mp3');
 					me.die();
 				},
 				missFunc:function(me)
@@ -5291,14 +4883,14 @@ Game.Launch=function()
 					var me=Game.Notes[i];
 					var pic='';
 					if (me.pic!='') pic='<div class="icon" style="'+(me.pic[2]?'background-image:url('+me.pic[2]+');':'')+'background-position:'+(-me.pic[0]*48)+'px '+(-me.pic[1]*48)+'px;"></div>';
-					str='<div id="note-'+me.id+'" class="framed note '+(me.pic!=''?'haspic':'nopic')+' '+(me.desc!=''?'hasdesc':'nodesc')+'"><div class="close" onclick="PlaySound(\'snd/tick.mp3\');Game.CloseNote('+me.id+');">x</div>'+pic+'<div class="text"><h3>'+me.title+'</h3>'+(me.desc!=''?'<div class="line"></div><h5>'+me.desc+'</h5>':'')+'</div></div>'+str;
+					str='<div id="note-'+me.id+'" class="framed note '+(me.pic!=''?'haspic':'nopic')+' '+(me.desc!=''?'hasdesc':'nodesc')+'"><div class="close" onclick="PlaySound(\'assets/snd/tick.mp3\');Game.CloseNote('+me.id+');">x</div>'+pic+'<div class="text"><h3>'+me.title+'</h3>'+(me.desc!=''?'<div class="line"></div><h5>'+me.desc+'</h5>':'')+'</div></div>'+str;
 					remaining--;
 				}
 			}
 			if (remaining>0) str='<div class="remaining">+'+remaining+' more notification'+(remaining==1?'':'s')+'.</div>'+str;
 			if (Game.Notes.length>1)
 			{
-				str+='<div class="framed close sidenote" onclick="PlaySound(\'snd/tick.mp3\');Game.CloseNotes();">x</div>';
+				str+='<div class="framed close sidenote" onclick="PlaySound(\'assets/snd/tick.mp3\');Game.CloseNotes();">x</div>';
 			}
 			Game.noteL.innerHTML=str;
 			for (var i in Game.Notes)
@@ -5384,7 +4976,7 @@ Game.Launch=function()
 				{
 					if (typeof options[i]=='string') options[i]=[options[i],'Game.ClosePrompt();'];
 					options[i][1]=options[i][1].replace(/'/g,'&#39;').replace(/"/g,'&#34;');
-					opts+='<a id="promptOption'+i+'" class="option" '+Game.clickStr+'="PlaySound(\'snd/tick.mp3\');'+options[i][1]+'">'+options[i][0]+'</a>';
+					opts+='<a id="promptOption'+i+'" class="option" '+Game.clickStr+'="PlaySound(\'assets/snd/tick.mp3\');'+options[i][1]+'">'+options[i][0]+'</a>';
 				}
 			}
 			Game.promptL.innerHTML=str+'<div class="optionBox">'+opts+'</div>';
@@ -5418,7 +5010,7 @@ Game.Launch=function()
 		{
 			var invert=invert?1:0;
 			if (!callback) callback='';
-			callback+='PlaySound(\'snd/tick.mp3\');';
+			callback+='PlaySound(\'assets/snd/tick.mp3\');';
 			return '<a class="option'+((Game.prefs[prefName]^invert)?'':' off')+'" id="'+button+'" '+Game.clickStr+'="Game.Toggle(\''+prefName+'\',\''+button+'\',\''+on+'\',\''+off+'\',\''+invert+'\');'+callback+'">'+(Game.prefs[prefName]?on:off)+'</a>';
 		}
 		Game.Toggle=function(prefName,button,on,off,invert)
@@ -5459,7 +5051,7 @@ Game.Launch=function()
 		Game.WriteSlider=function(slider,leftText,rightText,startValueFunction,callback)
 		{
 			if (!callback) callback='';
-			return '<div class="sliderBox"><div style="float:left;">'+leftText+'</div><div style="float:right;" id="'+slider+'RightText">'+rightText.replace('[$]',startValueFunction())+'</div><input class="slider" style="clear:both;" type="range" min="0" max="100" step="1" value="'+startValueFunction()+'" onchange="'+callback+'" oninput="'+callback+'" onmouseup="PlaySound(\'snd/tick.mp3\');" id="'+slider+'"/></div>';
+			return '<div class="sliderBox"><div style="float:left;">'+leftText+'</div><div style="float:right;" id="'+slider+'RightText">'+rightText.replace('[$]',startValueFunction())+'</div><input class="slider" style="clear:both;" type="range" min="0" max="100" step="1" value="'+startValueFunction()+'" onchange="'+callback+'" oninput="'+callback+'" onmouseup="PlaySound(\'assets/snd/tick.mp3\');" id="'+slider+'"/></div>';
 		}
 		
 		Game.onPanel='Left';
@@ -5489,8 +5081,8 @@ Game.Launch=function()
 			l('statsButton').className=(Game.onMenu=='stats')?'button selected':'button';
 			l('logButton').className=(Game.onMenu=='log')?'button selected':'button';
 			
-			if (Game.onMenu=='') PlaySound('snd/clickOff.mp3');
-			else PlaySound('snd/clickOn.mp3');
+			if (Game.onMenu=='') PlaySound('assets/snd/clickOff.mp3');
+			else PlaySound('assets/snd/clickOn.mp3');
 			
 			Game.UpdateMenu();
 			
@@ -5565,7 +5157,7 @@ Game.Launch=function()
 			}
 			return '';
 		}
-		Game.ClickTinyCookie=function(){if (!Game.HasAchiev('Tiny cookie')){PlaySound('snd/tick.mp3');Game.Win('Tiny cookie');}}
+		Game.ClickTinyCookie=function(){if (!Game.HasAchiev('Tiny cookie')){PlaySound('assets/snd/tick.mp3');Game.Win('Tiny cookie');}}
 		
 		Game.setVolume=function(what)
 		{
@@ -5589,11 +5181,11 @@ Game.Launch=function()
 				str+='<div class="section">Options</div>'+
 				'<div class="subsection">'+
 				'<div class="title">General</div>'+
-				'<div class="listing"><a class="option" '+Game.clickStr+'="Game.toSave=true;PlaySound(\'snd/tick.mp3\');">Save</a><label>Save manually (the game autosaves every 60 seconds; shortcut : ctrl+S)</label></div>'+
-				'<div class="listing"><a class="option" '+Game.clickStr+'="Game.ExportSave();PlaySound(\'snd/tick.mp3\');">Export save</a><a class="option" '+Game.clickStr+'="Game.ImportSave();PlaySound(\'snd/tick.mp3\');">Import save</a><label>You can use this to backup your save or to transfer it to another computer (shortcut for import : ctrl+O)</label></div>'+
-				'<div class="listing"><a class="option" '+Game.clickStr+'="Game.FileSave();PlaySound(\'snd/tick.mp3\');">Save to file</a><a class="option" style="position:relative;"><input id="FileLoadInput" type="file" style="cursor:pointer;opacity:0;position:absolute;left:0px;top:0px;width:100%;height:100%;" onchange="Game.FileLoad(event);" '+Game.clickStr+'="PlaySound(\'snd/tick.mp3\');"/>Load from file</a><label>Use this to keep backups on your computer</label></div>'+
+				'<div class="listing"><a class="option" '+Game.clickStr+'="Game.toSave=true;PlaySound(\'assets/snd/tick.mp3\');">Save</a><label>Save manually (the game autosaves every 60 seconds; shortcut : ctrl+S)</label></div>'+
+				'<div class="listing"><a class="option" '+Game.clickStr+'="Game.ExportSave();PlaySound(\'assets/snd/tick.mp3\');">Export save</a><a class="option" '+Game.clickStr+'="Game.ImportSave();PlaySound(\'assets/snd/tick.mp3\');">Import save</a><label>You can use this to backup your save or to transfer it to another computer (shortcut for import : ctrl+O)</label></div>'+
+				'<div class="listing"><a class="option" '+Game.clickStr+'="Game.FileSave();PlaySound(\'assets/snd/tick.mp3\');">Save to file</a><a class="option" style="position:relative;"><input id="FileLoadInput" type="file" style="cursor:pointer;opacity:0;position:absolute;left:0px;top:0px;width:100%;height:100%;" onchange="Game.FileLoad(event);" '+Game.clickStr+'="PlaySound(\'assets/snd/tick.mp3\');"/>Load from file</a><label>Use this to keep backups on your computer</label></div>'+
 				
-				'<div class="listing"><a class="option warning" '+Game.clickStr+'="Game.HardReset();PlaySound(\'snd/tick.mp3\');">Wipe save</a><label>Delete all your progress, including your achievements</label></div>'+
+				'<div class="listing"><a class="option warning" '+Game.clickStr+'="Game.HardReset();PlaySound(\'assets/snd/tick.mp3\');">Wipe save</a><label>Delete all your progress, including your achievements</label></div>'+
 				'<div class="title">Settings</div>'+
 				'<div class="listing">'+
 				Game.WriteSlider('volumeSlider','Volume','[$]%',function(){return Game.volume;},'Game.setVolume(Math.round(l(\'volumeSlider\').value));l(\'volumeSliderRightText\').innerHTML=Game.volume+\'%\';')+'<br>'+
@@ -5635,7 +5227,7 @@ Game.Launch=function()
 			else if (Game.onMenu=='log')
 			{
 				str+=replaceAll('[bakeryName]',Game.bakeryName,Game.updateLog);
-				if (!Game.HasAchiev('Olden days')) str+='<div style="text-align:right;width:100%;"><div '+Game.clickStr+'="Game.SparkleAt(Game.mouseX,Game.mouseY);PlaySound(\'snd/tick.mp3\');PlaySound(\'snd/shimmerClick.mp3\');Game.Win(\'Olden days\');Game.UpdateMenu();" class="icon" style="display:inline-block;transform:scale(0.5);cursor:pointer;width:48px;height:48px;background-position:'+(-12*48)+'px '+(-3*48)+'px;"></div></div>';
+				if (!Game.HasAchiev('Olden days')) str+='<div style="text-align:right;width:100%;"><div '+Game.clickStr+'="Game.SparkleAt(Game.mouseX,Game.mouseY);PlaySound(\'assets/snd/tick.mp3\');PlaySound(\'assets/snd/shimmerClick.mp3\');Game.Win(\'Olden days\');Game.UpdateMenu();" class="icon" style="display:inline-block;transform:scale(0.5);cursor:pointer;width:48px;height:48px;background-position:'+(-12*48)+'px '+(-3*48)+'px;"></div></div>';
 			}
 			else if (Game.onMenu=='stats')
 			{
@@ -5717,9 +5309,18 @@ Game.Launch=function()
 				}
 				
 				var achievementsStr='';
+				// TODO HERE
 				var pools={
-					'dungeon':'<b>Dungeon achievements</b> <small>(Not technically achievable yet.)</small>',
-					'shadow':'<b>Shadow achievements</b> <small>(These are feats that are either unfair or difficult to attain. They do not give milk.)</small>'
+					'ascent':"<b>Ascention achievements</b>",
+					'click':"<b>Clicking achievements</b>",
+					'season':"<b>Seasonal achievements</b>",
+					'cookie':"<b>Cookie achievements</b>",
+					'minigame':"<b>Minigame achievements</b>",
+					'production':"<b>Production achievements</b>",
+					'building':"<b>Building achievements</b>",
+					'misc':"<b>Miscellaneous achievements</b><br><small>(Find these by exploring around.)</small>",
+					'dungeon':'<b>Dungeon achievements</b><br><small>(Not technically achievable yet.)</small>',
+					'shadow':'<b>Shadow achievements</b><br><small>(These are feats that are either unfair or difficult to attain. They do not give milk.)</small>'
 				};
 				for (var i in achievements)
 				{
@@ -5737,8 +5338,8 @@ Game.Launch=function()
 					{
 						var milk=Game.Milks[i];
 						milkStr+='<div '+Game.getTooltip(
-						'<div class="prompt" style="text-align:center;padding-bottom:6px;white-space:nowrap;margin:0px;padding-bottom:96px;"><h3 style="margin:6px 32px 0px 32px;">'+milk.name+'</h3><div style="opacity:0.75;font-size:9px;">('+(i==0?'starter milk':('for '+Beautify(i*25)+' achievements'))+')</div><div class="line"></div><div style="width:100%;height:96px;position:absolute;left:0px;bottom:0px;background:url(img/'+milk.pic+'.png);"></div></div>'
-						,'top')+' style="background:url(img/icons.png?v='+Game.version+') '+(-milk.icon[0]*48)+'px '+(-milk.icon[1]*48)+'px;margin:2px 0px;" class="trophy"></div>';
+						'<div class="prompt" style="text-align:center;padding-bottom:6px;white-space:nowrap;margin:0px;padding-bottom:96px;"><h3 style="margin:6px 32px 0px 32px;">'+milk.name+'</h3><div style="opacity:0.75;font-size:9px;">('+(i==0?'starter milk':('for '+Beautify(i*25)+' achievements'))+')</div><div class="line"></div><div style="width:100%;height:96px;position:absolute;left:0px;bottom:0px;background:url(assets/img/'+milk.pic+'.png);"></div></div>'
+						,'top')+' style="background:url(assets/img/icons.png?v='+Game.version+') '+(-milk.icon[0]*48)+'px '+(-milk.icon[1]*48)+'px;margin:2px 0px;" class="trophy"></div>';
 					}
 				}
 				milkStr+='<div style="clear:both;"></div>';
@@ -5750,8 +5351,8 @@ Game.Launch=function()
 					for (var i=0;i<=Game.santaLevel;i++)
 					{
 						santaStr+='<div '+Game.getTooltip(
-						'<div class="prompt" style="text-align:center;padding-bottom:6px;white-space:nowrap;margin:0px 32px;"><div style="width:96px;height:96px;margin:4px auto;background:url(img/santa.png) '+(-i*96)+'px 0px;filter:drop-shadow(0px 3px 2px #000);-webkit-filter:drop-shadow(0px 3px 2px #000);"></div><div class="line"></div><h3>'+Game.santaLevels[i]+'</h3></div>'
-						,'top')+' style="background:url(img/santa.png) '+(-i*48)+'px 0px;background-size:'+(frames*48)+'px 48px;" class="trophy"></div>';
+						'<div class="prompt" style="text-align:center;padding-bottom:6px;white-space:nowrap;margin:0px 32px;"><div style="width:96px;height:96px;margin:4px auto;background:url(assets/img/santa.png) '+(-i*96)+'px 0px;filter:drop-shadow(0px 3px 2px #000);-webkit-filter:drop-shadow(0px 3px 2px #000);"></div><div class="line"></div><h3>'+Game.santaLevels[i]+'</h3></div>'
+						,'top')+' style="background:url(assets/img/santa.png) '+(-i*48)+'px 0px;background-size:'+(frames*48)+'px 48px;" class="trophy"></div>';
 					}
 					santaStr+='<div style="clear:both;"></div>';
 				}
@@ -5766,9 +5367,9 @@ Game.Launch=function()
 						{
 							var level=Game.dragonLevels[mainLevels[i]];
 							dragonStr+='<div '+Game.getTooltip(
-							//'<div style="width:96px;height:96px;margin:4px auto;background:url(img/dragon.png?v='+Game.version+') '+(-level.pic*96)+'px 0px;"></div><div class="line"></div><div style="min-width:200px;text-align:center;margin-bottom:6px;">'+level.name+'</div>'
-							'<div class="prompt" style="text-align:center;padding-bottom:6px;white-space:nowrap;margin:0px 32px;"><div style="width:96px;height:96px;margin:4px auto;background:url(img/dragon.png?v='+Game.version+') '+(-level.pic*96)+'px 0px;filter:drop-shadow(0px 3px 2px #000);-webkit-filter:drop-shadow(0px 3px 2px #000);"></div><div class="line"></div><h3>'+level.name+'</h3></div>'
-							,'top')+' style="background:url(img/dragon.png?v='+Game.version+') '+(-level.pic*48)+'px 0px;background-size:'+(frames*48)+'px 48px;" class="trophy"></div>';
+							//'<div style="width:96px;height:96px;margin:4px auto;background:url(assets/img/dragon.png?v='+Game.version+') '+(-level.pic*96)+'px 0px;"></div><div class="line"></div><div style="min-width:200px;text-align:center;margin-bottom:6px;">'+level.name+'</div>'
+							'<div class="prompt" style="text-align:center;padding-bottom:6px;white-space:nowrap;margin:0px 32px;"><div style="width:96px;height:96px;margin:4px auto;background:url(assets/img/dragon.png?v='+Game.version+') '+(-level.pic*96)+'px 0px;filter:drop-shadow(0px 3px 2px #000);-webkit-filter:drop-shadow(0px 3px 2px #000);"></div><div class="line"></div><h3>'+level.name+'</h3></div>'
+							,'top')+' style="background:url(assets/img/dragon.png?v='+Game.version+') '+(-level.pic*48)+'px 0px;background-size:'+(frames*48)+'px 48px;" class="trophy"></div>';
 						}
 					}
 					dragonStr+='<div style="clear:both;"></div>';
@@ -5889,7 +5490,7 @@ Game.Launch=function()
 		AddEvent(l('prefsButton'),'click',function(){Game.ShowMenu('prefs');});
 		AddEvent(l('statsButton'),'click',function(){Game.ShowMenu('stats');});
 		AddEvent(l('logButton'),'click',function(){Game.ShowMenu('log');});
-		AddEvent(l('legacyButton'),'click',function(){PlaySound('snd/tick.mp3');Game.Ascend();});
+		AddEvent(l('legacyButton'),'click',function(){PlaySound('assets/snd/tick.mp3');Game.Ascend();});
 		Game.ascendMeter=l('ascendMeter');
 		Game.ascendNumber=l('ascendNumber');
 		
@@ -6520,7 +6121,7 @@ Game.Launch=function()
 			
 			if (Game.TickerEffect && Game.TickerEffect.type=='fortune')
 			{
-				PlaySound('snd/fortune.mp3',1);
+				PlaySound('assets/snd/fortune.mp3',1);
 				Game.SparkleAt(Game.mouseX,Game.mouseY);
 				var effect=Game.TickerEffect.sub;
 				if (effect=='fortuneGC')
@@ -6729,7 +6330,7 @@ Game.Launch=function()
 						success=1;
 					}
 				}
-				if (success) {PlaySound('snd/buy'+choose([1,2,3,4])+'.mp3',0.75);this.refresh();}
+				if (success) {PlaySound('assets/snd/buy'+choose([1,2,3,4])+'.mp3',0.75);this.refresh();}
 				//if (moni>0 && amount>1) Game.Notify(this.name,'Bought <b>'+bought+'</b> for '+Beautify(moni)+' cookies','',2);
 			}
 			this.sell=function(amount,bypass)
@@ -6777,7 +6378,7 @@ Game.Launch=function()
 						else if (godLvl==3) Game.gainBuff('devastation',10,1+sold*0.0025);
 					}
 				}
-				if (success) {PlaySound('snd/sell'+choose([1,2,3,4])+'.mp3',0.75);this.refresh();}
+				if (success) {PlaySound('assets/snd/sell'+choose([1,2,3,4])+'.mp3',0.75);this.refresh();}
 				//if (moni>0) Game.Notify(this.name,'Sold <b>'+sold+'</b> for '+Beautify(moni)+' cookies','',2);
 			}
 			this.sacrifice=function(amount)//sell without getting back any money
@@ -6956,7 +6557,7 @@ Game.Launch=function()
 				Game.lumps-=me.level+1;
 				me.level+=1;
 				if (me.level>=10 && me.levelAchiev10) Game.Win(me.levelAchiev10.name);
-				PlaySound('snd/upgrade.mp3',0.6);
+				PlaySound('assets/snd/upgrade.mp3',0.6);
 				Game.LoadMinigames();
 				me.refresh();
 				if (l('productLevel'+me.id)){var rect=l('productLevel'+me.id).getBoundingClientRect();Game.SparkleAt((rect.left+rect.right)/2,(rect.top+rect.bottom)/2-24);}
@@ -6968,7 +6569,7 @@ Game.Launch=function()
 				{
 					me.level+=1;
 					if (me.level>=10 && me.levelAchiev10) Game.Win(me.levelAchiev10.name);
-					PlaySound('snd/upgrade.mp3',0.6);
+					PlaySound('assets/snd/upgrade.mp3',0.6);
 					Game.LoadMinigames();
 					me.refresh();
 					if (l('productLevel'+me.id)){var rect=l('productLevel'+me.id).getBoundingClientRect();Game.SparkleAt((rect.left+rect.right)/2,(rect.top+rect.bottom)/2-24);}
@@ -7029,9 +6630,9 @@ Game.Launch=function()
 				iconOff=[iconOff[0]*64,iconOff[1]*64];
 				
 				//me.l.className=classes;
-				//l('productIcon'+me.id).style.backgroundImage='url(img/'+icon+')';
+				//l('productIcon'+me.id).style.backgroundImage='url(assets/img/'+icon+')';
 				l('productIcon'+me.id).style.backgroundPosition='-'+icon[0]+'px -'+icon[1]+'px';
-				//l('productIconOff'+me.id).style.backgroundImage='url(img/'+iconOff+')';
+				//l('productIconOff'+me.id).style.backgroundImage='url(assets/img/'+iconOff+')';
 				l('productIconOff'+me.id).style.backgroundPosition='-'+iconOff[0]+'px -'+iconOff[1]+'px';
 				l('productName'+me.id).innerHTML=displayName;
 				l('productOwned'+me.id).innerHTML=me.amount?me.amount:'';
@@ -7061,7 +6662,7 @@ Game.Launch=function()
 			{
 				var str='<div class="productButtons">';
 					str+='<div id="productLevel'+this.id+'" class="productButton productLevel lumpsOnly" onclick="Game.ObjectsById['+this.id+'].levelUp()" '+Game.getDynamicTooltip('Game.ObjectsById['+this.id+'].levelTooltip','this')+'></div>';
-					str+='<div id="productMinigameButton'+this.id+'" class="productButton productMinigameButton lumpsOnly" onclick="Game.ObjectsById['+this.id+'].switchMinigame(-1);PlaySound(Game.ObjectsById['+this.id+'].onMinigame?\'snd/clickOn.mp3\':\'snd/clickOff.mp3\');"></div>';
+					str+='<div id="productMinigameButton'+this.id+'" class="productButton productMinigameButton lumpsOnly" onclick="Game.ObjectsById['+this.id+'].switchMinigame(-1);PlaySound(Game.ObjectsById['+this.id+'].onMinigame?\'assets/snd/clickOn.mp3\':\'assets/snd/clickOff.mp3\');"></div>';
 				str+='</div>';
 				l('sectionLeftExtra').innerHTML=l('sectionLeftExtra').innerHTML+str;
 			}
@@ -7070,8 +6671,8 @@ Game.Launch=function()
 				var str='<div class="row" id="row'+this.id+'"><div class="separatorBottom"></div>';
 				str+='<div class="productButtons">';
 					str+='<div id="productLevel'+this.id+'" class="productButton productLevel lumpsOnly" onclick="Game.ObjectsById['+this.id+'].levelUp()" '+Game.getDynamicTooltip('Game.ObjectsById['+this.id+'].levelTooltip','this')+'></div>';
-					str+='<div id="productMinigameButton'+this.id+'" class="productButton productMinigameButton lumpsOnly" onclick="Game.ObjectsById['+this.id+'].switchMinigame(-1);PlaySound(Game.ObjectsById['+this.id+'].onMinigame?\'snd/clickOn.mp3\':\'snd/clickOff.mp3\');"></div>';
-					str+='<div class="productButton productMute" '+Game.getTooltip('<div style="width:150px;text-align:center;font-size:11px;"><b>Mute</b><br>(Minimize this building)</div>','this')+' onclick="Game.ObjectsById['+this.id+'].mute(1);PlaySound(Game.ObjectsById['+this.id+'].muted?\'snd/clickOff.mp3\':\'snd/clickOn.mp3\');" id="productMute'+this.id+'">Mute</div>';
+					str+='<div id="productMinigameButton'+this.id+'" class="productButton productMinigameButton lumpsOnly" onclick="Game.ObjectsById['+this.id+'].switchMinigame(-1);PlaySound(Game.ObjectsById['+this.id+'].onMinigame?\'assets/snd/clickOn.mp3\':\'assets/snd/clickOff.mp3\');"></div>';
+					str+='<div class="productButton productMute" '+Game.getTooltip('<div style="width:150px;text-align:center;font-size:11px;"><b>Mute</b><br>(Minimize this building)</div>','this')+' onclick="Game.ObjectsById['+this.id+'].mute(1);PlaySound(Game.ObjectsById['+this.id+'].muted?\'assets/snd/clickOff.mp3\':\'assets/snd/clickOn.mp3\');" id="productMute'+this.id+'">Mute</div>';
 				str+='</div>';
 				str+='<canvas class="rowCanvas" id="rowCanvas'+this.id+'"></canvas>';
 				str+='<div class="rowSpecial" id="rowSpecial'+this.id+'"></div>';
@@ -7354,7 +6955,7 @@ Game.Launch=function()
 			}
 			
 			Game.storeToRefresh=1;
-			if (id!=-1) PlaySound('snd/tick.mp3');
+			if (id!=-1) PlaySound('assets/snd/tick.mp3');
 		}
 		Game.BuildStore=function()//create the DOM for the store's buildings
 		{
@@ -7443,7 +7044,7 @@ Game.Launch=function()
 						var script=document.createElement('script');
 						script.id='minigameScript-'+me.id;
 						Game.scriptBindings['minigameScript-'+me.id]=me;
-						script.setAttribute('src',me.minigameUrl+'?r='+Game.version);
+						script.setAttribute('src',"minigame/"+me.minigameUrl+'?r='+Game.version);
 						script.onload=function(me,script){return function(){
 							if (!me.minigameLoaded) Game.scriptLoaded(me,script);
 						}}(me,'minigameScript-'+me.id);
@@ -7593,7 +7194,7 @@ Game.Launch=function()
 			Game.UnlockTiered(this);
 			if (this.amount>=Game.SpecialGrandmaUnlock && Game.Objects['Grandma'].amount>0) Game.Unlock(this.grandma.name);
 		});
-		Game.last.minigameUrl='minigameGarden.js';
+		//Game.last.minigameUrl='minigameGarden.js';
 		Game.last.minigameName='Garden';
 		
 		new Game.Object('Mine','mine|mines|mined|[X] mile deeper|[X] miles deeper','Mines out cookie dough and chocolate chips.',4,3,{base:'mine',xV:16,yV:16,w:64,rows:2,x:0,y:24},10000,function(me){
@@ -7627,7 +7228,7 @@ Game.Launch=function()
 			Game.UnlockTiered(this);
 			if (this.amount>=Game.SpecialGrandmaUnlock && Game.Objects['Grandma'].amount>0) Game.Unlock(this.grandma.name);
 		});
-		Game.last.minigameUrl='minigameMarket.js';
+		//Game.last.minigameUrl='minigameMarket.js';
 		Game.last.minigameName='Stock Market';
 		
 		new Game.Object('Temple','temple|temples|discovered|[X] sacred artifact retrieved|[X] sacred artifacts retrieved','Full of precious, ancient chocolate.',7,16,{base:'temple',xV:8,yV:4,w:72,rows:2,x:0,y:-5},0,function(me){
@@ -7639,7 +7240,7 @@ Game.Launch=function()
 			Game.UnlockTiered(this);
 			if (this.amount>=Game.SpecialGrandmaUnlock && Game.Objects['Grandma'].amount>0) Game.Unlock(this.grandma.name);
 		});
-		Game.last.minigameUrl='minigamePantheon.js';
+		//Game.last.minigameUrl='minigamePantheon.js';
 		Game.last.minigameName='Pantheon';
 		
 		new Game.Object('Wizard tower','wizard tower|wizard towers|summoned|Incantations have [X] more syllable|Incantations have [X] more syllables','Summons cookies with magic spells.',8,17,{base:'wizardtower',xV:16,yV:16,w:48,rows:2,x:0,y:20},0,function(me){
@@ -7652,7 +7253,7 @@ Game.Launch=function()
 			if (this.amount>=Game.SpecialGrandmaUnlock && Game.Objects['Grandma'].amount>0) Game.Unlock(this.grandma.name);
 		});
 		Game.last.displayName='<span style="font-size:90%;letter-spacing:-1px;position:relative;bottom:2px;">Wizard tower</span>';//shrink
-		Game.last.minigameUrl='minigameGrimoire.js';
+		//Game.last.minigameUrl='minigameGrimoire.js';
 		Game.last.minigameName='Grimoire';
 		
 		new Game.Object('Shipment','shipment|shipments|shipped|[X] galaxy fully explored|[X] galaxies fully explored','Brings in fresh cookies from the cookie planet.',9,5,{base:'shipment',xV:16,yV:16,w:64,rows:1,x:0,y:0},40000,function(me){
@@ -7793,8 +7394,8 @@ Game.Launch=function()
 				me.ctx=me.canvas.getContext('2d',{alpha:false});
 				me.pics=[];
 				var icon=[0*64,me.icon*64];
-				muteStr+='<div class="tinyProductIcon" id="mutedProduct'+me.id+'" style="display:none;background-position:-'+icon[0]+'px -'+icon[1]+'px;" '+Game.clickStr+'="Game.ObjectsById['+me.id+'].mute(0);PlaySound(Game.ObjectsById['+me.id+'].muted?\'snd/clickOff.mp3\':\'snd/clickOn.mp3\');" '+Game.getDynamicTooltip('Game.mutedBuildingTooltip('+me.id+')','this')+'></div>';
-				//muteStr+='<div class="tinyProductIcon" id="mutedProduct'+me.id+'" style="display:none;background-position:-'+icon[0]+'px -'+icon[1]+'px;" '+Game.clickStr+'="Game.ObjectsById['+me.id+'].mute(0);PlaySound(Game.ObjectsById['+me.id+'].muted?\'snd/clickOff.mp3\':\'snd/clickOn.mp3\');" '+Game.getTooltip('<div style="width:150px;text-align:center;font-size:11px;"><b>Unmute '+me.plural+'</b><br>(Display this building)</div>')+'></div>';
+				muteStr+='<div class="tinyProductIcon" id="mutedProduct'+me.id+'" style="display:none;background-position:-'+icon[0]+'px -'+icon[1]+'px;" '+Game.clickStr+'="Game.ObjectsById['+me.id+'].mute(0);PlaySound(Game.ObjectsById['+me.id+'].muted?\'assets/snd/clickOff.mp3\':\'assets/snd/clickOn.mp3\');" '+Game.getDynamicTooltip('Game.mutedBuildingTooltip('+me.id+')','this')+'></div>';
+				//muteStr+='<div class="tinyProductIcon" id="mutedProduct'+me.id+'" style="display:none;background-position:-'+icon[0]+'px -'+icon[1]+'px;" '+Game.clickStr+'="Game.ObjectsById['+me.id+'].mute(0);PlaySound(Game.ObjectsById['+me.id+'].muted?\'assets/snd/clickOff.mp3\':\'assets/snd/clickOn.mp3\');" '+Game.getTooltip('<div style="width:150px;text-align:center;font-size:11px;"><b>Unmute '+me.plural+'</b><br>(Display this building)</div>')+'></div>';
 				
 				AddEvent(me.canvas,'mouseover',function(me){return function(){me.mouseOn=true;}}(me));
 				AddEvent(me.canvas,'mouseout',function(me){return function(){me.mouseOn=false;}}(me));
@@ -7920,7 +7521,7 @@ Game.Launch=function()
 					if (this.isVaulted()) this.unvault();
 					else this.vault();
 					Game.upgradesToRebuild=1;
-					PlaySound('snd/tick.mp3');
+					PlaySound('assets/snd/tick.mp3');
 				}
 			}
 			else this.buy();
@@ -7941,7 +7542,7 @@ Game.Launch=function()
 						l('toggleBox').style.display='none';
 						l('toggleBox').innerHTML='';
 						Game.choiceSelectorOn=-1;
-						PlaySound('snd/tick.mp3');
+						PlaySound('assets/snd/tick.mp3');
 					}
 					else
 					{
@@ -7980,7 +7581,7 @@ Game.Launch=function()
 								var icon=choices[i].icon;
 								var id=choices[i].id;
 								if (choices[i].div) str+='<div class="line"></div>';
-								str+='<div class="crate enabled'+(id==selected?' highlighted':'')+'" style="opacity:1;float:none;display:inline-block;'+(icon[2]?'background-image:url('+icon[2]+');':'')+'background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="Game.UpgradesById['+this.id+'].choicesPick('+id+');PlaySound(\'snd/tick.mp3\');Game.choiceSelectorOn=-1;Game.UpgradesById['+this.id+'].buy();" onMouseOut="l(\'choiceSelectedName\').innerHTML=Game.choiceSelectorChoices[Game.choiceSelectorSelected].name;" onMouseOver="l(\'choiceSelectedName\').innerHTML=Game.choiceSelectorChoices['+i+'].name;"'+
+								str+='<div class="crate enabled'+(id==selected?' highlighted':'')+'" style="opacity:1;float:none;display:inline-block;'+(icon[2]?'background-image:url('+icon[2]+');':'')+'background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="Game.UpgradesById['+this.id+'].choicesPick('+id+');PlaySound(\'assets/snd/tick.mp3\');Game.choiceSelectorOn=-1;Game.UpgradesById['+this.id+'].buy();" onMouseOut="l(\'choiceSelectedName\').innerHTML=Game.choiceSelectorChoices[Game.choiceSelectorSelected].name;" onMouseOver="l(\'choiceSelectedName\').innerHTML=Game.choiceSelectorChoices['+i+'].name;"'+
 								'></div>';
 							}
 						}
@@ -7988,7 +7589,7 @@ Game.Launch=function()
 						l('toggleBox').style.display='block';
 						l('toggleBox').focus();
 						Game.tooltip.hide();
-						PlaySound('snd/tick.mp3');
+						PlaySound('assets/snd/tick.mp3');
 						success=1;
 					}
 				}
@@ -8010,7 +7611,7 @@ Game.Launch=function()
 						if (Game.CountsAsUpgradeOwned(this.pool)) Game.UpgradesOwned++;
 						Game.setOnCrate(0);
 						Game.tooltip.hide();
-						PlaySound('snd/buy'+choose([1,2,3,4])+'.mp3',0.75);
+						PlaySound('assets/snd/buy'+choose([1,2,3,4])+'.mp3',0.75);
 						success=1;
 					}
 				}
@@ -8025,9 +7626,9 @@ Game.Launch=function()
 						this.bought=1;
 						if (this.buyFunction) this.buyFunction();
 						Game.BuildAscendTree();
-						PlaySound('snd/buy'+choose([1,2,3,4])+'.mp3',0.75);
-						PlaySound('snd/shimmerClick.mp3');
-						//PlaySound('snd/buyHeavenly.mp3');
+						PlaySound('assets/snd/buy'+choose([1,2,3,4])+'.mp3',0.75);
+						PlaySound('assets/snd/shimmerClick.mp3');
+						//PlaySound('assets/snd/buyHeavenly.mp3');
 						success=1;
 					}
 				}
@@ -8073,8 +7674,8 @@ Game.Launch=function()
 				Game.upgradesToRebuild=1;
 				Game.recalculateGains=1;
 				if (Game.CountsAsUpgradeOwned(this.pool)) Game.UpgradesOwned++;
-				PlaySound('snd/buy'+choose([1,2,3,4])+'.mp3',0.75);
-				if (this.pool=='prestige' || this.pool=='debug') PlaySound('snd/shimmerClick.mp3');
+				PlaySound('assets/snd/buy'+choose([1,2,3,4])+'.mp3',0.75);
+				if (this.pool=='prestige' || this.pool=='debug') PlaySound('assets/snd/shimmerClick.mp3');
 			}
 			else
 			{
@@ -8082,8 +7683,8 @@ Game.Launch=function()
 				Game.upgradesToRebuild=1;
 				Game.recalculateGains=1;
 				if (Game.CountsAsUpgradeOwned(this.pool)) Game.UpgradesOwned--;
-				PlaySound('snd/sell'+choose([1,2,3,4])+'.mp3',0.75);
-				if (this.pool=='prestige' || this.pool=='debug') PlaySound('snd/shimmerClick.mp3');
+				PlaySound('assets/snd/sell'+choose([1,2,3,4])+'.mp3',0.75);
+				if (this.pool=='prestige' || this.pool=='debug') PlaySound('assets/snd/shimmerClick.mp3');
 			}
 			if (Game.onMenu=='stats') Game.UpdateMenu();
 		}
@@ -8792,7 +8393,7 @@ Game.Launch=function()
 		Game.NewUpgradeCookie({name:'Violet macarons',desc:'It\'s like spraying perfume into your mouth!',icon:[24,4],require:'Box of macarons',							power:3,price: 9999999999999999999});
 		
 		order=40000;
-		new Game.Upgrade('Magic shenanigans','Cookie production <b>multiplied by 1,000</b>.<q>It\'s magic. I ain\'t gotta explain sh<div style="display:inline-block;background:url(img/money.png);width:16px;height:16px;position:relative;top:4px;left:0px;margin:0px -2px;"></div>t.</q>',7,[17,5]);//debug purposes only
+		new Game.Upgrade('Magic shenanigans','Cookie production <b>multiplied by 1,000</b>.<q>It\'s magic. I ain\'t gotta explain sh<div style="display:inline-block;background:url(assets/img/money.png);width:16px;height:16px;position:relative;top:4px;left:0px;margin:0px -2px;"></div>t.</q>',7,[17,5]);//debug purposes only
 		Game.last.pool='debug';
 		
 		
@@ -8963,7 +8564,7 @@ Game.Launch=function()
 		}
 		Game.AssignPermanentSlot=function(slot)
 		{
-			PlaySound('snd/tick.mp3');
+			PlaySound('assets/snd/tick.mp3');
 			Game.tooltip.hide();
 			var list=[];
 			for (var i in Game.Upgrades)
@@ -8989,7 +8590,7 @@ Game.Launch=function()
 			for (var i in list)
 			{
 				var me=list[i];
-				upgrades+=Game.crate(me,'','PlaySound(\'snd/tick.mp3\');Game.PutUpgradeInPermanentSlot('+me.id+','+slot+');','upgradeForPermanent'+me.id);
+				upgrades+=Game.crate(me,'','PlaySound(\'assets/snd/tick.mp3\');Game.PutUpgradeInPermanentSlot('+me.id+','+slot+');','upgradeForPermanent'+me.id);
 			}
 			var upgrade=Game.permanentUpgrades[slot];
 			Game.SelectingPermanentUpgrade=upgrade;
@@ -9748,7 +9349,7 @@ Game.Launch=function()
 			Game.Notify('The shimmering veil disappears...','',[9,10]);
 			Game.upgradesToRebuild=1;
 			Game.recalculateGains=1;
-			PlaySound('snd/spellFail.mp3',0.75);
+			PlaySound('assets/snd/spellFail.mp3',0.75);
 		}
 		
 		
@@ -10069,7 +9670,7 @@ Game.Launch=function()
 						Game.recalculateGains=1;
 						Game.season=Game.baseSeason;
 						Game.seasonT=-1;
-						PlaySound('snd/tick.mp3');
+						PlaySound('assets/snd/tick.mp3');
 						return false;
 					}
 					else return true;
@@ -10139,7 +9740,7 @@ Game.Launch=function()
 		Game.AchievementsById=[];
 		Game.AchievementsN=0;
 		Game.AchievementsOwned=0;
-		Game.Achievement=function(name,desc,icon)
+		Game.Achievement=function(name,desc,icon,pool)
 		{
 			this.id=Game.AchievementsN;
 			this.name=name;
@@ -10151,7 +9752,7 @@ Game.Launch=function()
 			this.disabled=0;
 			this.order=this.id;
 			if (order) this.order=order+this.id*0.001;
-			this.pool='normal';
+			this.pool=pool || 'normal';
 			this.vanilla=Game.vanilla;
 			this.type='achievement';
 			
@@ -10222,7 +9823,7 @@ Game.Launch=function()
 		
 		Game.TieredAchievement=function(name,desc,building,tier)
 		{
-			var achiev=new Game.Achievement(name,desc,Game.GetIcon(building,tier));
+			var achiev=new Game.Achievement(name,desc,Game.GetIcon(building,tier),"building");
 			Game.SetTier(building,tier);
 			return achiev;
 		}
@@ -10235,7 +9836,7 @@ Game.Launch=function()
 			if (tier==2) {icon[1]=23;n+=7;}
 			else if (tier==3) {icon[1]=24;n+=14;}
 			var pow=Math.pow(10,n);
-			var achiev=new Game.Achievement(name,'Make <b>'+toFixed(pow)+'</b> cookies just from '+building.plural+'.'+(q?'<q>'+q+'</q>':''),icon);
+			var achiev=new Game.Achievement(name,'Make <b>'+toFixed(pow)+'</b> cookies just from '+building.plural+'.'+(q?'<q>'+q+'</q>':''),icon,"production");
 			building.productionAchievs.push({pow:pow,achiev:achiev});
 			return achiev;
 		}
@@ -10246,7 +9847,7 @@ Game.Launch=function()
 		{
 			var threshold=Math.pow(10,Math.floor(Game.BankAchievements.length*1.5+2));
 			if (Game.BankAchievements.length==0) threshold=1;
-			var achiev=new Game.Achievement(name,'Bake <b>'+toFixed(threshold)+'</b> cookie'+(threshold==1?'':'s')+' in one ascension.'+(q?('<q>'+q+'</q>'):''),[Game.thresholdIcons[Game.BankAchievements.length],(Game.BankAchievements.length>32?1:Game.BankAchievements.length>23?2:5)]);
+			var achiev=new Game.Achievement(name,'Bake <b>'+toFixed(threshold)+'</b> cookie'+(threshold==1?'':'s')+' in one ascension.'+(q?('<q>'+q+'</q>'):''),[Game.thresholdIcons[Game.BankAchievements.length],(Game.BankAchievements.length>32?1:Game.BankAchievements.length>23?2:5)],"cookie");
 			achiev.threshold=threshold;
 			achiev.order=100+Game.BankAchievements.length*0.01;
 			Game.BankAchievements.push(achiev);
@@ -10257,7 +9858,7 @@ Game.Launch=function()
 		{
 			var threshold=Math.pow(10,Math.floor(Game.CpsAchievements.length*1.2));
 			//if (Game.CpsAchievements.length==0) threshold=1;
-			var achiev=new Game.Achievement(name,'Bake <b>'+toFixed(threshold)+'</b> cookie'+(threshold==1?'':'s')+' per second.'+(q?('<q>'+q+'</q>'):''),[Game.thresholdIcons[Game.CpsAchievements.length],(Game.CpsAchievements.length>32?1:Game.CpsAchievements.length>23?2:5)]);
+			var achiev=new Game.Achievement(name,'Bake <b>'+toFixed(threshold)+'</b> cookie'+(threshold==1?'':'s')+' per second.'+(q?('<q>'+q+'</q>'):''),[Game.thresholdIcons[Game.CpsAchievements.length],(Game.CpsAchievements.length>32?1:Game.CpsAchievements.length>23?2:5)],"cookie");
 			achiev.threshold=threshold;
 			achiev.order=200+Game.CpsAchievements.length*0.01;
 			Game.CpsAchievements.push(achiev);
@@ -10311,14 +9912,14 @@ Game.Launch=function()
 		new Game.Achievement('Clickorama','Make <b>1,000,000,000</b> cookies from clicking.',[11,13]);
 		
 		order=1050;
-		new Game.Achievement('Click','Have <b>1</b> cursor.',[0,0]);
-		new Game.Achievement('Double-click','Have <b>2</b> cursors.',[0,6]);
-		new Game.Achievement('Mouse wheel','Have <b>50</b> cursors.',[1,6]);
-		new Game.Achievement('Of Mice and Men','Have <b>100</b> cursors.',[0,1]);
-		new Game.Achievement('The Digital','Have <b>200</b> cursors.',[0,2]);
+		Game.TieredAchievement('Click','Have <b>1</b> cursor.','Cursor',1);
+		Game.TieredAchievement('Double-click','Have <b>2</b> cursors.','Cursor',2);
+		Game.TieredAchievement('Mouse wheel','Have <b>50</b> cursors.','Cursor',3);
+		Game.TieredAchievement('Of Mice and Men','Have <b>100</b> cursors.','Cursor',4);
+		Game.TieredAchievement('The Digital','Have <b>200</b> cursors.','Cursor',5);
 		
 		order=1100;
-		new Game.Achievement('Just wrong','Sell a grandma.<q>I thought you loved me.</q>',[10,9]);
+		new Game.Achievement('Just wrong','Sell a grandma.<q>I thought you loved me.</q>',[10,9],"misc");
 		Game.TieredAchievement('Grandma\'s cookies','Have <b>1</b> grandma.','Grandma',1);
 		Game.TieredAchievement('Sloppy kisses','Have <b>50</b> grandmas.','Grandma',2);
 		Game.TieredAchievement('Retirement home','Have <b>100</b> grandmas.','Grandma',3);
@@ -10360,9 +9961,9 @@ Game.Launch=function()
 		
 		
 		order=7000;
-		new Game.Achievement('One with everything','Have <b>at least 1</b> of every building.',[2,7]);
-		new Game.Achievement('Mathematician','Have at least <b>1 of the most expensive object, 2 of the second-most expensive, 4 of the next</b> and so on (capped at 128).',[23,12]);
-		new Game.Achievement('Base 10','Have at least <b>10 of the most expensive object, 20 of the second-most expensive, 30 of the next</b> and so on.',[23,12]);
+		new Game.Achievement('One with everything','Have <b>at least 1</b> of every building.',[2,7],'building');
+		new Game.Achievement('Mathematician','Have at least <b>1 of the most expensive object, 2 of the second-most expensive, 4 of the next</b> and so on (capped at 128).',[23,12],'building');
+		new Game.Achievement('Base 10','Have at least <b>10 of the most expensive object, 20 of the second-most expensive, 30 of the next</b> and so on.',[23,12],'building');
 		
 		order=10000;
 		new Game.Achievement('Golden cookie','Click a <b>golden cookie</b>.',[10,14]);
@@ -10370,7 +9971,8 @@ Game.Launch=function()
 		new Game.Achievement('A stroke of luck','Click <b>27 golden cookies</b>.',[23,6]);
 		
 		order=30200;
-		new Game.Achievement('Cheated cookies taste awful','Hack in some cookies.',[10,6]);Game.last.pool='shadow';
+		new Game.Achievement('Cheated cookies taste awful','Hack in some cookies.',[10,6],"shadow");
+		new Game.Achievement('Rickroll\'d','Get rickrolled.<br><q>You were trying to cheat in some cookies, weren\'t you?</q>',[17,5],"shadow");
 		order=11010;
 		new Game.Achievement('Uncanny clicker','Click really, really fast.<q>Well I\'ll be!</q>',[12,0]);
 		
@@ -10387,7 +9989,7 @@ Game.Launch=function()
 		order=10000;
 		new Game.Achievement('Fortune','Click <b>77 golden cookies</b>.<q>You should really go to bed.</q>',[24,6]);
 		order=31000;
-		new Game.Achievement('True Neverclick','Make <b>1 million</b> cookies with <b>no</b> cookie clicks.<q>This kinda defeats the whole purpose, doesn\'t it?</q>',[12,0]);Game.last.pool='shadow';
+		new Game.Achievement('True Neverclick','Make <b>1 million</b> cookies with <b>no</b> cookie clicks.<q>This kinda defeats the whole purpose, doesn\'t it?</q>',[12,0],"shadow");
 		
 		order=20000;
 		new Game.Achievement('Elder nap','Appease the grandmatriarchs at least <b>once</b>.<q>we<br>are<br>eternal</q>',[8,9]);
@@ -10424,16 +10026,16 @@ Game.Launch=function()
 		new Game.Achievement('Hardcore','Get to <b>1 billion</b> cookies baked with <b>no upgrades purchased</b>.',[12,6]);//Game.last.pool='shadow';
 		
 		order=30600;
-		new Game.Achievement('Speed baking I','Get to <b>1 million</b> cookies baked in <b>35 minutes</b>.',[12,5]);Game.last.pool='shadow';
-		new Game.Achievement('Speed baking II','Get to <b>1 million</b> cookies baked in <b>25 minutes</b>.',[13,5]);Game.last.pool='shadow';
-		new Game.Achievement('Speed baking III','Get to <b>1 million</b> cookies baked in <b>15 minutes</b>.',[14,5]);Game.last.pool='shadow';
+		new Game.Achievement('Speed baking I','Get to <b>1 million</b> cookies baked in <b>35 minutes</b>.',[12,5],'shadow');
+		new Game.Achievement('Speed baking II','Get to <b>1 million</b> cookies baked in <b>25 minutes</b>.',[13,5],'shadow');
+		new Game.Achievement('Speed baking III','Get to <b>1 million</b> cookies baked in <b>15 minutes</b>.',[14,5],'shadow');
 		
 		
 		order=61000;
-		var achiev=new Game.Achievement('Getting even with the oven','Defeat the <b>Sentient Furnace</b> in the factory dungeons.',[12,7]);Game.last.pool='dungeon';
-		var achiev=new Game.Achievement('Now this is pod-smashing','Defeat the <b>Ascended Baking Pod</b> in the factory dungeons.',[12,7]);Game.last.pool='dungeon';
-		var achiev=new Game.Achievement('Chirped out','Find and defeat <b>Chirpy</b>, the dysfunctionning alarm bot.',[13,7]);Game.last.pool='dungeon';
-		var achiev=new Game.Achievement('Follow the white rabbit','Find and defeat the elusive <b>sugar bunny</b>.',[14,7]);Game.last.pool='dungeon';
+		var achiev=new Game.Achievement('Getting even with the oven','Defeat the <b>Sentient Furnace</b> in the factory dungeons.',[12,7],'dungeon');
+		var achiev=new Game.Achievement('Now this is pod-smashing','Defeat the <b>Ascended Baking Pod</b> in the factory dungeons.',[12,7],'dungeon');
+		var achiev=new Game.Achievement('Chirped out','Find and defeat <b>Chirpy</b>, the dysfunctionning alarm bot.',[13,7],'dungeon');
+		var achiev=new Game.Achievement('Follow the white rabbit','Find and defeat the elusive <b>sugar bunny</b>.',[14,7],'dungeon');
 		
 		order=1000;
 		new Game.Achievement('Clickasmic','Make <b>100,000,000,000</b> cookies from clicking.',[11,14]);
@@ -10446,7 +10048,7 @@ Game.Launch=function()
 		new Game.Achievement('Wholesome','Unlock <b>100%</b> of your heavenly chips power.',[15,7]);
 		
 		order=33000;
-		new Game.Achievement('Just plain lucky','You have <b>1 chance in 500,000</b> every second of earning this achievement.',[15,6]);Game.last.pool='shadow';
+		new Game.Achievement('Just plain lucky','You have <b>1 chance in 500,000</b> every second of earning this achievement.',[15,6],'shadow');
 		
 		order=21000;
 		new Game.Achievement('Itchscratcher','Burst <b>1 wrinkler</b>.',[19,8]);
@@ -10535,8 +10137,8 @@ Game.Launch=function()
 		new Game.Achievement('Clicknarok','Make <b>1,000,000,000,000,000</b> cookies from clicking.',[11,16]);
 		
 		order=1050;
-		new Game.Achievement('Extreme polydactyly','Have <b>300</b> cursors.',[0,13]);
-		new Game.Achievement('Dr. T','Have <b>400</b> cursors.',[0,14]);
+		Game.TieredAchievement('Extreme polydactyly','Have <b>300</b> cursors.','Cursor',1);
+		Game.TieredAchievement('Dr. T','Have <b>400</b> cursors.','Cursor',1);
 		
 		order=1100;Game.TieredAchievement('The old never bothered me anyway','Have <b>250</b> grandmas.','Grandma',6);
 		order=1200;Game.TieredAchievement('Homegrown','Have <b>200</b> farms.','Farm',5);
@@ -10550,9 +10152,9 @@ Game.Launch=function()
 		order=2000;Game.TieredAchievement('Rise and shine','Have <b>200</b> prisms.','Prism',5);
 		
 		order=30200;
-		new Game.Achievement('God complex','Name yourself <b>Orteil</b>.<div class="warning">Note : usurpers incur a -1% CpS penalty until they rename themselves something else.</div><q>But that\'s not you, is it?</q>',[17,5]);Game.last.pool='shadow';
-		new Game.Achievement('Third-party','Use an <b>add-on</b>.<q>Some find vanilla to be the most boring flavor.</q>',[16,5]);Game.last.pool='shadow';//if you're making a mod, add a Game.Win('Third-party') somewhere in there!
-		
+		new Game.Achievement('God complex','Name yourself <b>Orteil</b>.<div class="warning">Note : usurpers incur a -1% CpS penalty until they rename themselves something else.</div><q>But that\'s not you, is it?</q>',[17,5],'shadow');
+		new Game.Achievement('Third-party','Use an <b>add-on</b>.<q>Some find vanilla to be the most boring flavor.</q>',[16,5],'shadow');//if you're making a mod, add a Game.Win('Third-party') somewhere in there!
+
 		order=30050;
 		new Game.Achievement('Dematerialize','Ascend with <b>1 quintillion</b> cookies baked.<q>Presto!<br>...where\'d the cookies go?</q>',[11,7]);
 		new Game.Achievement('Nil zero zilch','Ascend with <b>1 sextillion</b> cookies baked.<q>To summarize : really not very much at all.</q>',[11,7]);
@@ -10631,12 +10233,12 @@ Game.Launch=function()
 		new Game.Achievement('Rebirth','Ascend at least once.',[21,6]);
 		
 		order=11000;
-		new Game.Achievement('Here you go','Click this achievement\'s slot.<q>All you had to do was ask.</q>',[1,7]);Game.last.clickFunction=function(){if (!Game.HasAchiev('Here you go')){PlaySound('snd/tick.mp3');Game.Win('Here you go');}};
+		new Game.Achievement('Here you go','Click this achievement\'s slot.<q>All you had to do was ask.</q>',[1,7]);Game.last.clickFunction=function(){if (!Game.HasAchiev('Here you go')){PlaySound('assets/snd/tick.mp3');Game.Win('Here you go');}};
 		
 		order=30000;
 		new Game.Achievement('Resurrection','Ascend <b>10 times</b>.',[21,6]);
 		new Game.Achievement('Reincarnation','Ascend <b>100 times</b>.',[21,6]);
-		new Game.Achievement('Endless cycle','Ascend <b>1000 times</b>.<q>Oh hey, it\'s you again.</q>',[2,7]);Game.last.pool='shadow';
+		new Game.Achievement('Endless cycle','Ascend <b>1000 times</b>.<q>Oh hey, it\'s you again.</q>',[2,7],'shadow');
 		
 		
 		
@@ -10667,7 +10269,7 @@ Game.Launch=function()
 		Game.BankAchievement('Are you gonna eat all that?');
 		Game.BankAchievement('We\'re gonna need a bigger bakery');
 		Game.BankAchievement('In the mouth of madness','A cookie is just what we tell each other it is.');
-		Game.BankAchievement('Brought to you by the letter <div style="display:inline-block;background:url(img/money.png);width:16px;height:16px;"></div>');
+		Game.BankAchievement('Brought to you by the letter <div style="display:inline-block;background:url(assets/img/money.png);width:16px;height:16px;"></div>');
 	
 	
 		Game.CpsAchievement('A world filled with cookies');
@@ -10693,7 +10295,7 @@ Game.Launch=function()
 		new Game.Achievement('Clickataclysm','Make <b>10,000,000,000,000,000,000</b> cookies from clicking.',[11,18]);
 		
 		order=1050;
-		new Game.Achievement('Thumbs, phalanges, metacarpals','Have <b>500</b> cursors.<q>& KNUCKLES</q>',[0,15]);
+		Game.TieredAchievement('Thumbs, phalanges, metacarpals','Have <b>500</b> cursors.<q>& KNUCKLES</q>','Cursor',1);
 		
 		order=6000;
 		new Game.Achievement('Polymath','Own <b>300</b> upgrades and <b>3000</b> buildings.<q>Excellence doesn\'t happen overnight - it usually takes a good couple days.</q>',[29,7]);
@@ -10718,7 +10320,7 @@ Game.Launch=function()
 		order=2000;Game.TieredAchievement('Harmony of the spheres','Have <b>300</b> prisms.','Prism',7);
 		
 		order=35000;
-		new Game.Achievement('Last Chance to See','Burst the near-extinct <b>shiny wrinkler</b>.<q>You monster!</q>',[24,12]);Game.last.pool='shadow';
+		new Game.Achievement('Last Chance to See','Burst the near-extinct <b>shiny wrinkler</b>.<q>You monster!</q>',[24,12],'shadow');
 		
 		order=10000;
 		new Game.Achievement('Early bird','Click a golden cookie <b>less than 1 second after it spawns</b>.',[10,14]);
@@ -10733,7 +10335,7 @@ Game.Launch=function()
 		new Game.Achievement('Year\'s worth of cavities','Harvest <b>365 coalescing sugar lumps</b>.<q>My lumps my lumps my lumps.</q>',[29,14]);
 		new Game.Achievement('Hand-picked','Successfully harvest a coalescing sugar lump before it\'s ripe.',[28,14]);
 		new Game.Achievement('Sugar sugar','Harvest a <b>bifurcated sugar lump</b>.',[29,15]);
-		new Game.Achievement('All-natural cane sugar','Harvest a <b>golden sugar lump</b>.',[29,16]);Game.last.pool='shadow';
+		new Game.Achievement('All-natural cane sugar','Harvest a <b>golden sugar lump</b>.',[29,16],'shadow');
 		new Game.Achievement('Sweetmeats','Harvest a <b>meaty sugar lump</b>.',[29,17]);
 		
 		order=7002;
@@ -10828,7 +10430,7 @@ Game.Launch=function()
 		new Game.Achievement('A wizard is you','Cast <b>999</b> spells.<q>I\'m a what?</q>',[29,11]);
 		
 		order=10000;
-		new Game.Achievement('Four-leaf cookie','Have <b>4</b> golden cookies simultaneously.<q>Fairly rare, considering cookies don\'t even have leaves.</q>',[27,6]);Game.last.pool='shadow';
+		new Game.Achievement('Four-leaf cookie','Have <b>4</b> golden cookies simultaneously.<q>Fairly rare, considering cookies don\'t even have leaves.</q>',[27,6],'shadow');
 		
 		order=2100;
 		Game.TieredAchievement('Lucked out','Have <b>1</b> chancemaker.','Chancemaker',1);
@@ -10884,7 +10486,7 @@ Game.Launch=function()
 		order=2100;Game.TieredAchievement('Jackpot','Have <b>450</b> chancemakers.','Chancemaker',10);
 		
 		order=36000;
-		new Game.Achievement('So much to do so much to see','Manage a cookie legacy for <b>at least a year</b>.<q>Thank you so much for playing Cookie Clicker!</q>',[23,11]);Game.last.pool='shadow';
+		new Game.Achievement('So much to do so much to see','Manage a cookie legacy for <b>at least a year</b>.<q>Thank you so much for playing Cookie Clicker!</q>',[23,11],'shadow');
 		
 		
 		
@@ -10934,7 +10536,7 @@ Game.Launch=function()
 		new Game.Achievement('Maillard reaction','Harvest a <b>caramelized sugar lump</b>.',[29,27]);
 		
 		order=30250;
-		new Game.Achievement('When the cookies ascend just right','Ascend with exactly <b>1,000,000,000,000 cookies</b>.',[25,7]);Game.last.pool='shadow';//this achievement is shadow because it is only achievable through blind luck or reading external guides; this may change in the future
+		new Game.Achievement('When the cookies ascend just right','Ascend with exactly <b>1,000,000,000,000 cookies</b>.',[25,7],'shadow');//this achievement is shadow because it is only achievable through blind luck or reading external guides; this may change in the future
 		
 		
 		order=1050;
@@ -11046,7 +10648,7 @@ Game.Launch=function()
 		Game.BankAchievement('It\'s only wafer-thin','Just the one!');
 		
 		order=1000;new Game.Achievement('Clickety split','Make <b>1,000,000,000,000,000,000,000,000,000</b> cookies from clicking.',[11,31]);
-		order=1050;new Game.Achievement('Gotta hand it to you','Have <b>700</b> cursors.',[0,17]);
+		order=1050;Game.TieredAchievement('Gotta hand it to you','Have <b>700</b> cursors.','Cursor',1);
 		order=1100;Game.TieredAchievement('Okay boomer','Have <b>600</b> grandmas.','Grandma',13);
 		order=1200;Game.TieredAchievement('Overripe','Have <b>550</b> farms.','Farm',12);
 		order=1300;Game.TieredAchievement('Rock on','Have <b>550</b> mines.','Mine',12);
@@ -11065,7 +10667,7 @@ Game.Launch=function()
 		order=2300;Game.TieredAchievement('Curly braces','Have <b>550</b> javascript consoles.<q>Or as the French call them, mustache boxes.<br>Go well with quotes.</q>','Javascript console',12);
 		
 		order=10000;
-		new Game.Achievement('Seven horseshoes','Click <b>27777 golden cookies</b>.<q>Enough for one of those funky horses that graze near your factories.</q>',[21,33]);Game.last.pool='shadow';
+		new Game.Achievement('Seven horseshoes','Click <b>27777 golden cookies</b>.<q>Enough for one of those funky horses that graze near your factories.</q>',[21,33],'shadow');
 		
 		order=11000;
 		new Game.Achievement('Olden days','Find the <b>forgotten madeleine</b>.<q>DashNet Farms remembers.</q>',[12,3]);
@@ -11604,7 +11206,7 @@ Game.Launch=function()
 		Game.wrinklerSquishSound=Math.floor(Math.random()*4)+1;
 		Game.playWrinklerSquishSound=function()
 		{
-			PlaySound('snd/squish'+(Game.wrinklerSquishSound)+'.mp3',0.5);
+			PlaySound('assets/snd/squish'+(Game.wrinklerSquishSound)+'.mp3',0.5);
 			Game.wrinklerSquishSound+=Math.floor(Math.random()*1.5)+1;
 			if (Game.wrinklerSquishSound>4) Game.wrinklerSquishSound-=4;
 		}
@@ -11730,7 +11332,7 @@ Game.Launch=function()
 						//me.close*=0.99;
 						if (Game.Click && Game.lastClickedEl==l('backgroundLeftCanvas'))
 						{
-							if (Game.keys[17] && Game.sesame) {me.type=!me.type;PlaySound('snd/shimmerClick.mp3');}//ctrl-click on a wrinkler in god mode to toggle its shininess
+							if (Game.keys[17] && Game.sesame) {me.type=!me.type;PlaySound('assets/snd/shimmerClick.mp3');}//ctrl-click on a wrinkler in god mode to toggle its shininess
 							else
 							{
 								Game.playWrinklerSquishSound();
@@ -11765,7 +11367,7 @@ Game.Launch=function()
 				if (me.hp<=0.5 && me.phase>0)
 				{
 					Game.playWrinklerSquishSound();
-					PlaySound('snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
+					PlaySound('assets/snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
 					Game.wrinklersPopped++;
 					Game.recalculateGains=1;
 					me.phase=0;
@@ -11993,9 +11595,9 @@ Game.Launch=function()
 						Game.CanClick=0;
 						if (Game.Click && Game.lastClickedEl==l('backgroundLeftCanvas'))
 						{
-							if (Game.specialTab!=Game.specialTabs[i]) {Game.specialTab=Game.specialTabs[i];Game.ToggleSpecialMenu(1);PlaySound('snd/press.mp3');}
-							else {Game.ToggleSpecialMenu(0);PlaySound('snd/press.mp3');}
-							//PlaySound('snd/tick.mp3');
+							if (Game.specialTab!=Game.specialTabs[i]) {Game.specialTab=Game.specialTabs[i];Game.ToggleSpecialMenu(1);PlaySound('assets/snd/press.mp3');}
+							else {Game.ToggleSpecialMenu(0);PlaySound('assets/snd/press.mp3');}
+							//PlaySound('assets/snd/tick.mp3');
 						}
 					}
 					
@@ -12013,7 +11615,7 @@ Game.Launch=function()
 			var moni=Math.pow(Game.santaLevel+1,Game.santaLevel+1);
 			if (Game.cookies>moni && Game.santaLevel<14)
 			{
-				PlaySound('snd/shimmerClick.mp3');
+				PlaySound('assets/snd/shimmerClick.mp3');
 				
 				Game.Spend(moni);
 				Game.santaLevel=(Game.santaLevel+1)%15;
@@ -12192,7 +11794,7 @@ Game.Launch=function()
 				if (Game.dragonLevel>=parseInt(i)+4)
 				{
 					var icon=Game.dragonAuras[i].pic;
-					if (i==0 || i!=otherAura) str+='<div class="crate enabled'+(i==Game.SelectingDragonAura?' highlighted':'')+'" style="opacity:1;float:none;display:inline-block;'+(icon[2]?'background-image:url('+icon[2]+');':'')+'background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="PlaySound(\'snd/tick.mp3\');Game.SetDragonAura('+i+','+slot+');" onMouseOut="Game.DescribeDragonAura('+Game.SelectingDragonAura+');" onMouseOver="Game.DescribeDragonAura('+i+');"'+
+					if (i==0 || i!=otherAura) str+='<div class="crate enabled'+(i==Game.SelectingDragonAura?' highlighted':'')+'" style="opacity:1;float:none;display:inline-block;'+(icon[2]?'background-image:url('+icon[2]+');':'')+'background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="PlaySound(\'assets/snd/tick.mp3\');Game.SetDragonAura('+i+','+slot+');" onMouseOut="Game.DescribeDragonAura('+Game.SelectingDragonAura+');" onMouseOver="Game.DescribeDragonAura('+i+');"'+
 					'></div>';
 				}
 			}
@@ -12228,7 +11830,7 @@ Game.Launch=function()
 		{
 			if (Game.dragonLevel<Game.dragonLevels.length-1 && Game.dragonLevels[Game.dragonLevel].cost())
 			{
-				PlaySound('snd/shimmerClick.mp3');
+				PlaySound('assets/snd/shimmerClick.mp3');
 				Game.dragonLevels[Game.dragonLevel].buy();
 				Game.dragonLevel=(Game.dragonLevel+1)%Game.dragonLevels.length;
 				
@@ -12246,9 +11848,9 @@ Game.Launch=function()
 			if (Game.specialTab=='dragon' && Game.dragonLevel>=4 && Game.Has('Pet the dragon') && l('specialPic'))
 			{
 				triggerAnim(l('specialPic'),'pucker');
-				PlaySound('snd/click'+Math.floor(Math.random()*7+1)+'.mp3',0.5);
-				if (Date.now()-Game.lastClickedSpecialPic>2000) PlaySound('snd/growl.mp3');
-				//else if (Math.random()<0.5) PlaySound('snd/growl.mp3',0.5+Math.random()*0.2);
+				PlaySound('assets/snd/click'+Math.floor(Math.random()*7+1)+'.mp3',0.5);
+				if (Date.now()-Game.lastClickedSpecialPic>2000) PlaySound('assets/snd/growl.mp3');
+				//else if (Math.random()<0.5) PlaySound('assets/snd/growl.mp3',0.5+Math.random()*0.2);
 				Game.lastClickedSpecialPic=Date.now();
 				if (Game.prefs.particles)
 				{
@@ -12281,8 +11883,8 @@ Game.Launch=function()
 				else if (Game.specialTab=='dragon') {pic='dragon.png?v='+Game.version;frame=Game.dragonLevels[Game.dragonLevel].pic;}
 				else {pic='dragon.png?v='+Game.version;frame=4;}
 				
-				var str='<div id="specialPic" '+Game.clickStr+'="Game.ClickSpecialPic();" style="'+((Game.specialTab=='dragon' && Game.dragonLevel>=4 && Game.Has('Pet the dragon'))?'cursor:pointer;':'')+'position:absolute;left:-16px;top:-64px;width:96px;height:96px;background:url(img/'+pic+');background-position:'+(-frame*96)+'px 0px;filter:drop-shadow(0px 3px 2px #000);-webkit-filter:drop-shadow(0px 3px 2px #000);"></div>';
-				str+='<div class="close" onclick="PlaySound(\'snd/press.mp3\');Game.ToggleSpecialMenu(0);">x</div>';
+				var str='<div id="specialPic" '+Game.clickStr+'="Game.ClickSpecialPic();" style="'+((Game.specialTab=='dragon' && Game.dragonLevel>=4 && Game.Has('Pet the dragon'))?'cursor:pointer;':'')+'position:absolute;left:-16px;top:-64px;width:96px;height:96px;background:url(assets/img/'+pic+');background-position:'+(-frame*96)+'px 0px;filter:drop-shadow(0px 3px 2px #000);-webkit-filter:drop-shadow(0px 3px 2px #000);"></div>';
+				str+='<div class="close" onclick="PlaySound(\'assets/snd/press.mp3\');Game.ToggleSpecialMenu(0);">x</div>';
 				
 				if (Game.specialTab=='santa')
 				{
@@ -12308,7 +11910,7 @@ Game.Launch=function()
 					if (Game.dragonLevel>=5)
 					{
 						var icon=Game.dragonAuras[Game.dragonAura].pic;
-						str+='<div class="crate enabled" style="opacity:1;position:absolute;right:18px;top:-58px;'+(icon[2]?'background-image:url('+icon[2]+');':'')+'background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="PlaySound(\'snd/tick.mp3\');Game.SelectDragonAura(0);" '+Game.getTooltip(
+						str+='<div class="crate enabled" style="opacity:1;position:absolute;right:18px;top:-58px;'+(icon[2]?'background-image:url('+icon[2]+');':'')+'background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="PlaySound(\'assets/snd/tick.mp3\');Game.SelectDragonAura(0);" '+Game.getTooltip(
 							'<div style="min-width:200px;text-align:center;"><h4>'+Game.dragonAuras[Game.dragonAura].name+'</h4>'+
 							'<div class="line"></div>'+
 							Game.dragonAuras[Game.dragonAura].desc+
@@ -12319,7 +11921,7 @@ Game.Launch=function()
 					if (Game.dragonLevel>=24)//2nd aura slot; increased with last building (javascript consoles)
 					{
 						var icon=Game.dragonAuras[Game.dragonAura2].pic;
-						str+='<div class="crate enabled" style="opacity:1;position:absolute;right:80px;top:-58px;'+(icon[2]?'background-image:url('+icon[2]+');':'')+'background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="PlaySound(\'snd/tick.mp3\');Game.SelectDragonAura(1);" '+Game.getTooltip(
+						str+='<div class="crate enabled" style="opacity:1;position:absolute;right:80px;top:-58px;'+(icon[2]?'background-image:url('+icon[2]+');':'')+'background-position:'+(-icon[0]*48)+'px '+(-icon[1]*48)+'px;" '+Game.clickStr+'="PlaySound(\'assets/snd/tick.mp3\');Game.SelectDragonAura(1);" '+Game.getTooltip(
 							'<div style="min-width:200px;text-align:center;"><h4>'+Game.dragonAuras[Game.dragonAura2].name+'</h4>'+
 							'<div class="line"></div>'+
 							Game.dragonAuras[Game.dragonAura2].desc+
@@ -12568,7 +12170,7 @@ Game.Launch=function()
 				{
 					if (false && Game.bgType!=0 && Game.ascensionMode!=1)
 					{
-						//l('backgroundCanvas').style.background='url(img/shadedBordersSoft.png) 0px 0px,url(img/bgWheat.jpg) 50% 50%';
+						//l('backgroundCanvas').style.background='url(assets/img/shadedBordersSoft.png) 0px 0px,url(assets/img/bgWheat.jpg) 50% 50%';
 						//l('backgroundCanvas').style.backgroundSize='100% 100%,cover';
 					}
 					else
@@ -13169,7 +12771,7 @@ Game.Launch=function()
 		
 		Game.killShimmers();
 		
-		//booooo
+		// booooo
 		Game.RuinTheFun=function(silent)
 		{
 			Game.popups=0;
@@ -13186,7 +12788,7 @@ Game.Launch=function()
 			for (var i in Game.Objects)
 			{
 				var me=Game.Objects[i];
-				me.level=9;
+				me.level=10;
 				me.levelUp();
 				if (me.minigame && me.minigame.onRuinTheFun) me.minigame.onRuinTheFun();
 			}
@@ -13198,6 +12800,12 @@ Game.Launch=function()
 			return 'You feel a bitter taste in your mouth...';
 		}
 		
+		// you fool. you fell for one of the classic blunders.
+		Game.FreeCookiezNoHaxForRealz=function(){
+			Game.Win('Rickroll\'d');
+			PlaySound('assets/snd/hax.mp3');
+			return "You fool. You fell for one of the classic blunders."
+		}
 		Game.SetAllUpgrades=function(on)
 		{
 			Game.popups=0;
@@ -13794,11 +13402,11 @@ Game.Launch=function()
 			{
 				//reset the gauge and play a sound if we gained a potential level
 				Game.ascendMeterPercent=0;
-				//PlaySound('snd/levelPrestige.mp3');//a bit too annoying
+				//PlaySound('assets/snd/levelPrestige.mp3');//a bit too annoying
 			}
 			Game.ascendMeterLevel=ascendNowToGet;
 			Game.ascendMeterPercentT=percent;//gauge that fills up as you near your next chip
-			//if (Game.ascendMeterPercentT<Game.ascendMeterPercent) {Game.ascendMeterPercent=0;PlaySound('snd/levelPrestige.mp3',0.5);}
+			//if (Game.ascendMeterPercentT<Game.ascendMeterPercent) {Game.ascendMeterPercent=0;PlaySound('assets/snd/levelPrestige.mp3',0.5);}
 			//if (percent>=1) {Game.ascendMeter.className='';} else Game.ascendMeter.className='filling';
 		}
 		//Game.ascendMeter.style.right=Math.floor(Math.max(0,1-Game.ascendMeterPercent)*100)+'px';
@@ -14063,6 +13671,17 @@ window.onload=function()
 				'About to cheat in some cookies or just checking for bugs?',
 				'Remember : cheated cookies taste awful!',
 				'Hey, Orteil here. Cheated cookies taste awful... or do they?',
+				'Oh snap, videogames!',
+				'If you hit this, don\'t worry! Just click the little x',
+				'What\'s this button do?',
+				'Have youy called an exterminator yet?',
+				'Sorry if there are bugs everywhere',
+				'If you type Alt + F4, you get a shadow achievement',
+				'Who pays in cookies, anyway?',
+				'https://www.youtube.com/watch?v=doEqUhFiQS4',
+				'secret achievements : https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+				'ooooooooooooooo a squirrel!',
+				'TODO : fix Game.FreeCookiezNoHaxForRealz(), too cheaty'
 			])+' ===]');
 			Game.Load();
 			//try {Game.Load();}
