@@ -65,7 +65,7 @@ Game.seasons = {
 };
 
 
-Game.baseSeason = 'groundhog';
+Game.baseSeason = '';
 var day = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
 
 var arr = Object.entries(Game.seasons);
